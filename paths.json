@@ -1,0 +1,24 @@
+{
+    "paths": [
+        {
+            "orig": "A",
+            "dest": "B",
+            "len": 2000
+        },
+        {
+            "orig": "B",
+            "dest": "C",
+            "len": 2000
+        },
+        {
+            "orig": "C",
+            "dest": "D",
+            "len": 2000
+        },
+        {
+            "orig": "D",
+            "dest": "A",
+            "len": 2000
+        }
+    ]
+}

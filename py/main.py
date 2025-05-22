@@ -1,7 +1,8 @@
 from transport_micro_simulator import *
 
 def main():
-    print("Hello from transport-micro-simulator!")
+    paths = load_paths("paths.json")
+    inf = Infrastructure(paths)
 
 
 if __name__ == "__main__":
