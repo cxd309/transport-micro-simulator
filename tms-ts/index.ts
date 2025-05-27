@@ -18,6 +18,7 @@ interface GraphEdge{
   u: string;
   v: string;
   len: number;
+  parentEdge?: string;
 }
 
 interface GraphData{
@@ -161,7 +162,7 @@ class Graph{
     return {route, len};
   }
 
-  public subdivideGraph(quantizeLevel: number): Graph{
+  public subdivideGraph(quantizeLen: number): Graph{
     const newGraph = new Graph;
 
     newGraph.addNodeList(this.nodes);
@@ -170,7 +171,17 @@ class Graph{
     let subEdgeCount = 0;
 
     for (const e of this.edges){
-      const {u, v, len} = e;
+      const {u, v, len, edgeID} = e;
+
+      if (len <= quantizeLen){
+        newGraph.addEdge({
+          "edgeID": edgeID,
+          "len": quantizeLen,
+          "u": u,
+          "v": v
+        });
+        continue;
+      }
       
       const uNode = this.nodes.find(n => n.nodeID === u);
       const vNode = this.nodes.find(n=> n.nodeID === v);
@@ -180,55 +191,58 @@ class Graph{
         continue;
       }
 
-      const dx = vNode?.loc.x - uNode?.loc.x;
-      const dy = vNode.loc.y - uNode.loc.y;
+      const n_subedges = Math.ceil(len / quantizeLen);
 
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const steps = Math.floor(len / quantizeLevel);
-
-      if (steps === 0){
-        newGraph.addEdge(e);
-        continue;
-      }
-
-      const deltaX = dx / (steps+ 1);
-      const deltaY = dy / (steps + 1);
-      const segmentLen = len / (steps + 1);
-
+      const dx = (vNode.loc.x - uNode.loc.x)/n_subedges;
+      const dy = (vNode.loc.y - uNode.loc.y)/n_subedges;
+      
       let prevNodeID = u;
+      
+      for (let i = 1; i< n_subedges; i++){
+        const subNodeID = `SUBNODE.${edgeID}.${i}`;
+        const subEdgeID = `SUBEDGE.${edgeID}.${i}`;
 
-      for (let i = 1; i<= steps; i++){
-        const subNodeID = `SUB.${u}.${v}.${i}`;
-        const subEdgeID = `SUBEDGE.${u}.${v}.${i}`;
         const newNode: GraphNode = {
           nodeID: subNodeID,
-          type: "side",
+          type: uNode.type,
           loc: {
-            x: uNode.loc.x + i * deltaX,
-            y: uNode.loc.y + i * deltaY,
+            x: uNode.loc.x + i * dx,
+            y: uNode.loc.y + i * dy,
           }
         };
+
         const newEdge: GraphEdge = {
           edgeID: subEdgeID,
           u: prevNodeID,
           v: subNodeID,
-          len: segmentLen,
+          len: quantizeLen,
+          parentEdge: edgeID
         };
+
         newGraph.addNode(newNode);
         newGraph.addEdge(newEdge);
+
         prevNodeID = subNodeID;
       }
 
       // Final edge
       newGraph.addEdge({
-        edgeID: `SUBEDGE.${u}.${v}.end`,
+        edgeID: `SUBEDGE.${edgeID}.${n_subedges}`,
         u: prevNodeID,
         v: v,
-        len: segmentLen
+        len: quantizeLen,
+        parentEdge: e.edgeID
       });
     }
 
     return newGraph;
+  }
+
+  public toJSON(): GraphData{
+    return {
+      nodes: this.nodes,
+      edges: this.edges
+    };
   }
 }
 
@@ -281,6 +295,7 @@ function zeroPad(num: number, size=3): string{
 function createBasicLoopGraph(): GraphData{
   const n_stn = 20;
   const s_is = 2000;
+  const s_stn = 100;
 
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
@@ -308,7 +323,7 @@ function createBasicLoopGraph(): GraphData{
       edgeID: `E${zeroPad(edges.length + 1)}`,
       u: stnID,
       v: trkID,
-      len: 0,
+      len: s_stn/2,
     });
 
     // Edge from track to next station
@@ -324,9 +339,14 @@ function createBasicLoopGraph(): GraphData{
   return { nodes, edges };
 }
 
-const loopGraph = createBasicLoopGraph();
+function saveGraphToFile(graph: Graph, filePath: string): void {
+  const graphData = graph.toJSON();
+  const jsonString = JSON.stringify(graphData, null, 2); // pretty-print with 2 spaces
+  fs.writeFileSync(filePath, jsonString, 'utf8');
+  console.log(`Graph saved to ${filePath}`);
+}
 
-const graph = new Graph();
+const loopGraph = createBasicLoopGraph();
 
 const veh: Vehicle = {
   "vehID": "VEH.001",
@@ -362,12 +382,13 @@ const route: Route = {
   "routeID":"RTE.001"
 }
 
-// Add nodes and edges to the graph
+const graph = new Graph();
 graph.addGraphData(loopGraph);
-const f = graph.subdivideGraph(100);
 
-// Now the graph object is populated with nodes and edges from data.json
-console.log(f);
+const subdivGraph = graph.subdivideGraph(100);
+
+saveGraphToFile(subdivGraph, `sim-outputs/graph-${Date.now()}`)
+
 
 //const { route, len } = graph.shortestPath('E', 'A'); // Find shortest path from node "A"
 //console.log(route); // Shortest distances from node A
