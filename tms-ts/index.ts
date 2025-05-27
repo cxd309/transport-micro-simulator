@@ -267,6 +267,11 @@ interface VehicleClass{
   v_max: number; // maximum speed (m/s)
 }
 
+interface SimLog{
+  time: number;
+  services: SimulationService[];
+}
+
 class SimulationService{
   service: TransportService;
   position: string; //nodeID for current position
@@ -325,10 +330,12 @@ class TransportMicroSimulator{
   simServices: SimulationService[];
   timeStep: number;
   duration: number;
-  log: string[];
+  log: SimLog[];
 
-  constructor(graph: Graph, services: TransportService[], quantizeLen: number, timeStep: number, duration: number){
-    this.graph = graph.subdivideGraph(quantizeLen);
+  constructor(graphData: GraphData, services: TransportService[], quantizeLen: number, timeStep: number, duration: number){
+    const g = new Graph();
+    g.addGraphData(graphData)
+    this.graph = g.subdivideGraph(quantizeLen);
     this.timeStep = timeStep;
     this.simServices = [];
     this.duration = duration
@@ -338,6 +345,20 @@ class TransportMicroSimulator{
       const simService = new SimulationService(s);
       this.simServices.push(simService);
     }
+  }
+
+  public run(): void{
+    for(let i = 0; i<(this.duration/this.timeStep); i++){
+      this.step();
+      this.logState(i*this.timeStep);
+    }
+  }
+
+  public logState(timestamp: number):void {
+    this.log.push({
+      "time": timestamp,
+      "services":this.simServices
+    })
   }
 
   public step(): void{
@@ -438,6 +459,12 @@ function saveGraphToFile(graph: Graph, filePath: string): void {
   console.log(`Graph saved to ${filePath}`);
 }
 
+function saveSimLogToFile(log: SimLog[], filePath: string): void {
+  const jsonString = JSON.stringify(log, null, 2); // pretty-print with 2 spaces
+  fs.writeFileSync(filePath, jsonString, 'utf8');
+  console.log(`Graph saved to ${filePath}`);
+}
+
 const loopGraph = createBasicLoopGraph();
 
 const veh: VehicleClass = {
@@ -447,7 +474,7 @@ const veh: VehicleClass = {
   "name": "bus"
 }
 
-const route: TransportService = {
+const r: TransportService = {
   "stops": [
     {
       "nodeID": "STN.001",
@@ -471,12 +498,10 @@ const route: TransportService = {
   "vehicle":veh
 }
 
-const graph = new Graph();
-graph.addGraphData(loopGraph);
+const sim = new TransportMicroSimulator(loopGraph, [r], 100,10,200)
+sim.run();
 
-const subdivGraph = graph.subdivideGraph(100);
-
-saveGraphToFile(subdivGraph, `sim-outputs/graph-${Date.now()}`)
+saveSimLogToFile(sim.log, `sim-outputs/simlog-${Date.now()}`);
 
 
 //const { route, len } = graph.shortestPath('E', 'A'); // Find shortest path from node "A"

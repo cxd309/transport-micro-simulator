@@ -220,8 +220,10 @@ class SimulationService {
     }
 }
 class TransportMicroSimulator {
-    constructor(graph, services, quantizeLen, timeStep, duration) {
-        this.graph = graph.subdivideGraph(quantizeLen);
+    constructor(graphData, services, quantizeLen, timeStep, duration) {
+        const g = new Graph();
+        g.addGraphData(graphData);
+        this.graph = g.subdivideGraph(quantizeLen);
         this.timeStep = timeStep;
         this.simServices = [];
         this.duration = duration;
@@ -230,6 +232,18 @@ class TransportMicroSimulator {
             const simService = new SimulationService(s);
             this.simServices.push(simService);
         }
+    }
+    run() {
+        for (let i = 0; i < (this.duration / this.timeStep); i++) {
+            this.step();
+            this.logState(i * this.timeStep);
+        }
+    }
+    logState(timestamp) {
+        this.log.push({
+            "time": timestamp,
+            "services": this.simServices
+        });
     }
     step() {
         for (const simService of this.simServices) {
@@ -316,6 +330,11 @@ function saveGraphToFile(graph, filePath) {
     fs_1.default.writeFileSync(filePath, jsonString, 'utf8');
     console.log(`Graph saved to ${filePath}`);
 }
+function saveSimLogToFile(log, filePath) {
+    const jsonString = JSON.stringify(log, null, 2); // pretty-print with 2 spaces
+    fs_1.default.writeFileSync(filePath, jsonString, 'utf8');
+    console.log(`Graph saved to ${filePath}`);
+}
 const loopGraph = createBasicLoopGraph();
 const veh = {
     "a_acc": 1,
@@ -323,7 +342,7 @@ const veh = {
     "v_max": 80,
     "name": "bus"
 };
-const route = {
+const r = {
     "stops": [
         {
             "nodeID": "STN.001",
@@ -346,10 +365,9 @@ const route = {
     "startNodeID": "STN.001",
     "vehicle": veh
 };
-const graph = new Graph();
-graph.addGraphData(loopGraph);
-const subdivGraph = graph.subdivideGraph(100);
-saveGraphToFile(subdivGraph, `sim-outputs/graph-${Date.now()}`);
+const sim = new TransportMicroSimulator(loopGraph, [r], 100, 10, 200);
+sim.run();
+saveSimLogToFile(sim.log, `sim-outputs/simlog-${Date.now()}`);
 //const { route, len } = graph.shortestPath('E', 'A'); // Find shortest path from node "A"
 //console.log(route); // Shortest distances from node A
 //console.log(len); // Previous nodes to reconstruct paths
