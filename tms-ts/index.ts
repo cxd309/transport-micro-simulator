@@ -1,3 +1,4 @@
+import { create } from 'domain';
 import fs from 'fs';
 import path from 'path';
 
@@ -9,6 +10,7 @@ interface Coordinate{
 interface GraphNode{
   loc: Coordinate
   id: string
+  type: "main" | "station" | "side"
 }
 
 interface GraphEdge{
@@ -84,6 +86,11 @@ class Graph{
     }
   }
 
+  public addGraphData(graphData: GraphData): void{
+    this.addNodeList(graphData.nodes);
+    this.addEdgeList(graphData.edges);
+  }
+
   public dijkstra(startNodeId: string): {distances: Record<string, number>, previous: Record<string, string | null>}{
     const distances: Record<string, number> = {};
     const previous: Record<string, string | null> = {};
@@ -155,27 +162,95 @@ class Graph{
   }
 }
 
-// Function to read and load data from data.json
-function loadGraphData(filePath: string): Graph {
-  const rawData = fs.readFileSync(filePath, 'utf-8'); // Read file synchronously
-  const jsonData: GraphData = JSON.parse(rawData); // Parse the JSON data
+class Route{
+  stops: string[];
 
-  const graph = new Graph();
-
-  // Add nodes and edges to the graph
-  graph.addNodeList(jsonData.nodes);
-  graph.addEdgeList(jsonData.edges);
-
-  return graph;
+  constructor(stops: string[]){
+    this.stops = stops;
+  }
 }
 
-// Load the graph from data.json
-const filePath = path.join(__dirname, 'random.json');
-const graph = loadGraphData(filePath);
+class Vehicle{
+  id: string;
+
+  constructor(id: string){
+    this.id = id;
+  }
+}
+
+class TransportMicroSimulator{
+  graph: Graph;
+  routes: Route[];
+  vehicles: Vehicle[];
+
+  constructor(graph: Graph, routes: Route[], vehicles: Vehicle[]){
+    this.graph = graph;
+    this.routes = routes;
+    this.vehicles = vehicles;
+  }
+}
+
+function zeroPad(num: number, size=3): string{
+  return num.toString().padStart(size, '0');
+}
+
+function createBasicLoopGraph(): GraphData{
+  const n_stn = 20;
+  const s_is = 2000;
+
+  const nodes: GraphNode[] = [];
+  const edges: GraphEdge[] = [];
+
+  for (let i=0; i< n_stn; i++){
+    const stnID = `STN.${zeroPad(i+1)}`;
+    const trkID = `TRK.${zeroPad(i+1)}`;
+
+    // Add station node
+    nodes.push({
+      id: stnID,
+      loc: { x: Math.cos((2 * Math.PI * i) / n_stn), y: Math.sin((2 * Math.PI * i) / n_stn) },
+      type: "station",
+    });
+
+    // Add track node
+    nodes.push({
+      id: trkID,
+      loc: { x: Math.cos((2 * Math.PI * (i + 0.5)) / n_stn), y: Math.sin((2 * Math.PI * (i + 0.5)) / n_stn) },
+      type: "main",
+    });
+
+    // Edge from station to track
+    edges.push({
+      id: `E${zeroPad(edges.length + 1)}`,
+      u: stnID,
+      v: trkID,
+      len: 0,
+    });
+
+    // Edge from track to next station
+    const nextStationId = `STN.${zeroPad((i + 1) % n_stn + 1)}`;
+    edges.push({
+      id: `E${zeroPad(edges.length + 1)}`,
+      u: trkID,
+      v: nextStationId,
+      len: s_is,
+    });
+  }
+  
+  
+  return { nodes, edges };
+}
+
+const loopGraph = createBasicLoopGraph();
+
+const graph = new Graph();
+
+// Add nodes and edges to the graph
+graph.addGraphData(loopGraph);
 
 // Now the graph object is populated with nodes and edges from data.json
 console.log(graph);
 
-const { route, len } = graph.shortestPath('E', 'A'); // Find shortest path from node "A"
-console.log(route); // Shortest distances from node A
-console.log(len); // Previous nodes to reconstruct paths
+//const { route, len } = graph.shortestPath('E', 'A'); // Find shortest path from node "A"
+//console.log(route); // Shortest distances from node A
+//console.log(len); // Previous nodes to reconstruct paths
