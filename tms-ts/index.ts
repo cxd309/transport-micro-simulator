@@ -3,26 +3,26 @@ import fs from 'fs';
 import path from 'path';
 
 interface Coordinate{
-  x: number
-  y: number
+  x: number;
+  y: number;
 }
 
 interface GraphNode{
-  loc: Coordinate
-  id: string
-  type: "main" | "station" | "side"
+  loc: Coordinate;
+  nodeID: string;
+  type: "main" | "station" | "side";
 }
 
 interface GraphEdge{
-  id: string
-  u: string
-  v: string
-  len: number
+  edgeID: string;
+  u: string;
+  v: string;
+  len: number;
 }
 
 interface GraphData{
-  nodes: GraphNode[]
-  edges: GraphEdge[]
+  nodes: GraphNode[];
+  edges: GraphEdge[];
 }
 
 class Graph{
@@ -35,34 +35,34 @@ class Graph{
   }
 
   private checkNodeExistance(nodeId: string): boolean {
-    return this.nodes.some(existingNode=>existingNode.id === nodeId);
+    return this.nodes.some(existingNode=>existingNode.nodeID === nodeId);
   }
 
   private checkEdgeExistance(edgeId: string): boolean {
-    return this.edges.some(existingEdge=>existingEdge.id === edgeId);
+    return this.edges.some(existingEdge=>existingEdge.edgeID === edgeId);
   }
 
   public addNode(newNode: GraphNode): boolean {
-    const uniqueNode = !this.checkNodeExistance(newNode.id);
+    const uniqueNode = !this.checkNodeExistance(newNode.nodeID);
 
     if(uniqueNode){
       this.nodes.push(newNode);
-      console.log(`Node with id ${newNode.id} added.`);
+      console.log(`Node with id ${newNode.nodeID} added.`);
     }else{
-      console.log(`Node with id ${newNode.id} already exists.`);
+      console.log(`Node with id ${newNode.nodeID} already exists.`);
     }
     return uniqueNode;
   }
 
   public addEdge(newEdge: GraphEdge): boolean {
     const validNodes = this.checkNodeExistance(newEdge.u) && this.checkNodeExistance(newEdge.v);
-    const uniqueEdge = !this.checkEdgeExistance(newEdge.id);
+    const uniqueEdge = !this.checkEdgeExistance(newEdge.edgeID);
 
     if (uniqueEdge && validNodes) {
       this.edges.push(newEdge);
-      console.log(`Edge with id ${newEdge.id} added.`);
+      console.log(`Edge with id ${newEdge.edgeID} added.`);
     } else if(!uniqueEdge){
-      console.log(`Edge with id ${newEdge.id} already exists.`);
+      console.log(`Edge with id ${newEdge.edgeID} already exists.`);
     } else {
       if (!this.checkNodeExistance(newEdge.u)) {
         console.log(`Node with id ${newEdge.u} does not exist.`);
@@ -98,8 +98,8 @@ class Graph{
 
     // Initialise all distances to inifinty, exect start node
     for(const n of this.nodes){
-      distances[n.id] = Infinity;
-      previous[n.id] = null;
+      distances[n.nodeID] = Infinity;
+      previous[n.nodeID] = null;
     }
     distances[startNodeId] = 0;
 
@@ -109,9 +109,9 @@ class Graph{
       let minDistance = Infinity;
 
       for (const n of this.nodes){
-        if (!visited.has(n.id) && distances[n.id] < minDistance){
-          minDistance = distances[n.id];
-          currentNodeId = n.id;
+        if (!visited.has(n.nodeID) && distances[n.nodeID] < minDistance){
+          minDistance = distances[n.nodeID];
+          currentNodeId = n.nodeID;
         }
       }
 
@@ -160,22 +160,106 @@ class Graph{
     }
     return {route, len};
   }
-}
 
-class Route{
-  stops: string[];
+  public subdivideGraph(quantizeLevel: number): Graph{
+    const newGraph = new Graph;
 
-  constructor(stops: string[]){
-    this.stops = stops;
+    newGraph.addNodeList(this.nodes);
+
+    let subNodeCount = 0;
+    let subEdgeCount = 0;
+
+    for (const e of this.edges){
+      const {u, v, len} = e;
+      
+      const uNode = this.nodes.find(n => n.nodeID === u);
+      const vNode = this.nodes.find(n=> n.nodeID === v);
+
+      if (!uNode || !vNode) {
+        console.warn(`Edge ${e.edgeID} refers to non-existent nodes.`);
+        continue;
+      }
+
+      const dx = vNode?.loc.x - uNode?.loc.x;
+      const dy = vNode.loc.y - uNode.loc.y;
+
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const steps = Math.floor(len / quantizeLevel);
+
+      if (steps === 0){
+        newGraph.addEdge(e);
+        continue;
+      }
+
+      const deltaX = dx / (steps+ 1);
+      const deltaY = dy / (steps + 1);
+      const segmentLen = len / (steps + 1);
+
+      let prevNodeID = u;
+
+      for (let i = 1; i<= steps; i++){
+        const subNodeID = `SUB.${u}.${v}.${i}`;
+        const subEdgeID = `SUBEDGE.${u}.${v}.${i}`;
+        const newNode: GraphNode = {
+          nodeID: subNodeID,
+          type: "side",
+          loc: {
+            x: uNode.loc.x + i * deltaX,
+            y: uNode.loc.y + i * deltaY,
+          }
+        };
+        const newEdge: GraphEdge = {
+          edgeID: subEdgeID,
+          u: prevNodeID,
+          v: subNodeID,
+          len: segmentLen,
+        };
+        newGraph.addNode(newNode);
+        newGraph.addEdge(newEdge);
+        prevNodeID = subNodeID;
+      }
+
+      // Final edge
+      newGraph.addEdge({
+        edgeID: `SUBEDGE.${u}.${v}.end`,
+        u: prevNodeID,
+        v: v,
+        len: segmentLen
+      });
+    }
+
+    return newGraph;
   }
 }
 
-class Vehicle{
-  id: string;
+interface RouteStop{
+  stnID: string;
+  dwell: number; // (seconds)
+}
 
-  constructor(id: string){
-    this.id = id;
-  }
+interface Route{
+  routeID: string;
+  stops: RouteStop[];
+  vehID: string;
+}
+
+interface VehicleClass{
+  name: string;
+  a_acc: number; // acceleration rate (m/s/s)
+  a_dcc: number; // deceleration rate (m/s/s)
+  v_max: number; // maximum speed (m/s)
+}
+
+interface Vehicle{
+  vehID: string;
+  vehClass: VehicleClass;
+  routeID: string;
+  state?: VehicleSimulationState;
+}
+
+interface VehicleSimulationState{
+  currentVelocity: number;
+  position: string; // current node or edge
 }
 
 class TransportMicroSimulator{
@@ -207,21 +291,21 @@ function createBasicLoopGraph(): GraphData{
 
     // Add station node
     nodes.push({
-      id: stnID,
+      nodeID: stnID,
       loc: { x: Math.cos((2 * Math.PI * i) / n_stn), y: Math.sin((2 * Math.PI * i) / n_stn) },
       type: "station",
     });
 
     // Add track node
     nodes.push({
-      id: trkID,
+      nodeID: trkID,
       loc: { x: Math.cos((2 * Math.PI * (i + 0.5)) / n_stn), y: Math.sin((2 * Math.PI * (i + 0.5)) / n_stn) },
       type: "main",
     });
 
     // Edge from station to track
     edges.push({
-      id: `E${zeroPad(edges.length + 1)}`,
+      edgeID: `E${zeroPad(edges.length + 1)}`,
       u: stnID,
       v: trkID,
       len: 0,
@@ -230,13 +314,12 @@ function createBasicLoopGraph(): GraphData{
     // Edge from track to next station
     const nextStationId = `STN.${zeroPad((i + 1) % n_stn + 1)}`;
     edges.push({
-      id: `E${zeroPad(edges.length + 1)}`,
+      edgeID: `E${zeroPad(edges.length + 1)}`,
       u: trkID,
       v: nextStationId,
       len: s_is,
     });
   }
-  
   
   return { nodes, edges };
 }
@@ -245,11 +328,46 @@ const loopGraph = createBasicLoopGraph();
 
 const graph = new Graph();
 
+const veh: Vehicle = {
+  "vehID": "VEH.001",
+  "routeID": "RTE.001",
+  "vehClass":{
+    "a_acc": 1,
+    "a_dcc": 1,
+    "v_max": 80,
+    "name": "bus"
+  }
+}
+
+const route: Route = {
+  "stops": [
+    {
+      "stnID": "STN.001",
+      "dwell": 60
+    },{
+      "stnID": "STN.003",
+      "dwell": 60
+    },{
+      "stnID": "STN.010",
+      "dwell": 60
+    },{
+      "stnID": "STN.015",
+      "dwell": 60
+    },{
+      "stnID": "STN.018",
+      "dwell": 60
+    },
+  ],
+  "vehID":"VEH.001",
+  "routeID":"RTE.001"
+}
+
 // Add nodes and edges to the graph
 graph.addGraphData(loopGraph);
+const f = graph.subdivideGraph(100);
 
 // Now the graph object is populated with nodes and edges from data.json
-console.log(graph);
+console.log(f);
 
 //const { route, len } = graph.shortestPath('E', 'A'); // Find shortest path from node "A"
 //console.log(route); // Shortest distances from node A
