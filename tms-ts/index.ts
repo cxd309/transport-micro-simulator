@@ -7,6 +7,8 @@ interface Coordinate{
   y: number;
 }
 
+type SimulationState= "stationary" | "accelerating" | "decelerating" | "cruising"
+
 interface GraphNode{
   loc: Coordinate;
   nodeID: string;
@@ -247,14 +249,15 @@ class Graph{
 }
 
 interface RouteStop{
-  stnID: string;
-  dwell: number; // (seconds)
+  nodeID: string; // nodeID for the stop
+  t_dwell: number; // dwell time at stop (s)
 }
 
-interface Route{
-  routeID: string;
-  stops: RouteStop[];
-  vehID: string;
+interface TransportService{
+  serviceID: string;
+  startNodeID: string; // startNodeID
+  stops: RouteStop[]; // stops to make (this will be cyclical A->B->C->A...)
+  vehicle: VehicleClass;
 }
 
 interface VehicleClass{
@@ -264,27 +267,116 @@ interface VehicleClass{
   v_max: number; // maximum speed (m/s)
 }
 
-interface Vehicle{
-  vehID: string;
-  vehClass: VehicleClass;
-  routeID: string;
-  state?: VehicleSimulationState;
-}
+class SimulationService{
+  service: TransportService;
+  position: string; //nodeID for current position
+  nextStop: string; //nodeID for the next stop
+  velocity: number;
+  state: SimulationState;
+  s_acc: number;
+  s_dcc: number;
+  remainingDwell: number;
 
-interface VehicleSimulationState{
-  currentVelocity: number;
-  position: string; // current node or edge
+  constructor(service: TransportService){
+    this.service = service;
+    this.position = service.startNodeID;
+    if(service.startNodeID === service.stops[0].nodeID){
+      this.nextStop = service.stops[1].nodeID;
+    }else{
+      this.nextStop = service.stops[0].nodeID;
+    }
+
+    this.velocity = 0;
+    this.state = "stationary";
+
+    this.s_acc = (this.service.vehicle.v_max ** 2)/(2 * this.service.vehicle.a_acc);
+    this.s_dcc = (this.service.vehicle.v_max ** 2)/(2 * this.service.vehicle.a_dcc);
+
+    this.remainingDwell = 0;
+  }
+
+  public advanceDwell(timeStep: number): void{
+    this.remainingDwell -= timeStep;
+    if (this.remainingDwell <= 0) {
+      this.remainingDwell = 0;
+      this.velocity = this.service.vehicle.v_max;
+      this.state = "cruising";
+    }
+  }
+
+  public startDwell(): void{
+    this.position = this.nextStop;
+    this.velocity = 0;
+    this.state = "stationary";
+
+    const stopIndex = this.service.stops.findIndex(stop => stop.nodeID === this.position) ?? 0;
+
+    // set the dwell time
+    this.remainingDwell = this.service.stops[stopIndex].t_dwell;
+
+    // find the new nextStop
+    this.nextStop = this.service.stops[(stopIndex + 1) % this.service.stops.length].nodeID;
+
+  }
 }
 
 class TransportMicroSimulator{
   graph: Graph;
-  routes: Route[];
-  vehicles: Vehicle[];
+  simServices: SimulationService[];
+  timeStep: number;
+  duration: number;
+  log: string[];
 
-  constructor(graph: Graph, routes: Route[], vehicles: Vehicle[]){
-    this.graph = graph;
-    this.routes = routes;
-    this.vehicles = vehicles;
+  constructor(graph: Graph, services: TransportService[], quantizeLen: number, timeStep: number, duration: number){
+    this.graph = graph.subdivideGraph(quantizeLen);
+    this.timeStep = timeStep;
+    this.simServices = [];
+    this.duration = duration
+    this.log = [];
+    
+    for(const s of services){
+      const simService = new SimulationService(s);
+      this.simServices.push(simService);
+    }
+  }
+
+  public step(): void{
+    for(const simService of this.simServices){
+
+      // Case 1: stationary
+      if(simService.remainingDwell > 0){
+        simService.advanceDwell(this.timeStep);
+        continue;
+      }
+
+      // Case 2: cruising
+      const {route: nextStopRoute, len: nextStopLen} = this.graph.shortestPath(simService.position, simService.nextStop);
+      const projectedDistance = simService.service.vehicle.v_max * this.timeStep;
+
+      if(nextStopLen <= projectedDistance || nextStopRoute.length === 2){
+        // arrived at station
+        simService.startDwell();
+      }else{
+        // move the correct number of nodes
+        let distToGo = projectedDistance;
+        let currentNode = simService.position;
+        for(let i = 1; i< nextStopRoute.length; i++){
+          const e = this.graph.edges.find(e => e.u === currentNode && e.v === nextStopRoute[i]);
+          if(!e) break;
+          if (e.len <= distToGo || i === 1){
+            currentNode = e.v;
+            distToGo-=e.len;
+          }else{
+            break;
+          }
+        }
+
+        simService.position = currentNode;
+        simService.velocity = simService.service.vehicle.v_max;
+        simService.state = "cruising";
+
+      }
+    }
   }
 }
 
@@ -348,38 +440,35 @@ function saveGraphToFile(graph: Graph, filePath: string): void {
 
 const loopGraph = createBasicLoopGraph();
 
-const veh: Vehicle = {
-  "vehID": "VEH.001",
-  "routeID": "RTE.001",
-  "vehClass":{
-    "a_acc": 1,
-    "a_dcc": 1,
-    "v_max": 80,
-    "name": "bus"
-  }
+const veh: VehicleClass = {
+  "a_acc": 1,
+  "a_dcc": 1,
+  "v_max": 80,
+  "name": "bus"
 }
 
-const route: Route = {
+const route: TransportService = {
   "stops": [
     {
-      "stnID": "STN.001",
-      "dwell": 60
+      "nodeID": "STN.001",
+      "t_dwell": 60
     },{
-      "stnID": "STN.003",
-      "dwell": 60
+      "nodeID": "STN.003",
+      "t_dwell": 60
     },{
-      "stnID": "STN.010",
-      "dwell": 60
+      "nodeID": "STN.010",
+      "t_dwell": 60
     },{
-      "stnID": "STN.015",
-      "dwell": 60
+      "nodeID": "STN.015",
+      "t_dwell": 60
     },{
-      "stnID": "STN.018",
-      "dwell": 60
+      "nodeID": "STN.018",
+      "t_dwell": 60
     },
   ],
-  "vehID":"VEH.001",
-  "routeID":"RTE.001"
+  "serviceID":"SVC.001",
+  "startNodeID":"STN.001",
+  "vehicle":veh
 }
 
 const graph = new Graph();
