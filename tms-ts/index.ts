@@ -26,15 +26,29 @@ interface GraphEdge{
 interface GraphData{
   nodes: GraphNode[];
   edges: GraphEdge[];
+  
 }
 
 class Graph{
   edges: GraphEdge[];
   nodes: GraphNode[];
+  private edgeMap: Map<string, GraphEdge>;
+  private shortestPathCache: Map<string, { route: string[], len: number }>
+
 
   constructor(){
     this.edges = [];
     this.nodes = [];
+    this.edgeMap = new Map();
+    this.shortestPathCache = new Map();
+  }
+
+  private getEdgeKey(u: string, v: string): string {
+    return `${u}->${v}`;
+  }
+
+  private getPathKey(start: string, end: string): string {
+    return `${start}->${end}`;
   }
 
   private checkNodeExistance(nodeId: string): boolean {
@@ -50,7 +64,7 @@ class Graph{
 
     if(uniqueNode){
       this.nodes.push(newNode);
-      console.log(`Node with id ${newNode.nodeID} added.`);
+      //console.log(`Node with id ${newNode.nodeID} added.`);
     }else{
       console.log(`Node with id ${newNode.nodeID} already exists.`);
     }
@@ -63,7 +77,8 @@ class Graph{
 
     if (uniqueEdge && validNodes) {
       this.edges.push(newEdge);
-      console.log(`Edge with id ${newEdge.edgeID} added.`);
+      this.edgeMap.set(this.getEdgeKey(newEdge.u, newEdge.v), newEdge);
+      //console.log(`Edge with id ${newEdge.edgeID} added.`);
     } else if(!uniqueEdge){
       console.log(`Edge with id ${newEdge.edgeID} already exists.`);
     } else {
@@ -75,6 +90,10 @@ class Graph{
     }
 
     return uniqueEdge && validNodes;
+  }
+
+  public getEdge(u: string, v: string): GraphEdge | undefined {
+    return this.edgeMap.get(this.getEdgeKey(u, v));
   }
 
   public addEdgeList(edgeList: GraphEdge[]): void {
@@ -90,8 +109,10 @@ class Graph{
   }
 
   public addGraphData(graphData: GraphData): void{
+    console.log("adding graph data");
     this.addNodeList(graphData.nodes);
     this.addEdgeList(graphData.edges);
+    console.log("graph data added");
   }
 
   public dijkstra(startNodeId: string): {distances: Record<string, number>, previous: Record<string, string | null>}{
@@ -142,27 +163,30 @@ class Graph{
     return {distances, previous};
   }
 
-  public shortestPath(uNodeId: string, vNodeId: string): {route: string[], len: number}{
-    const {distances, previous} = this.dijkstra(uNodeId);
+  public shortestPath(start: string, end: string): { route: string[], len: number } {
+    const key = this.getPathKey(start, end);
+    const cached = this.shortestPathCache.get(key);
+    if (cached) return cached;
+
+    const { distances, previous } = this.dijkstra(start);
 
     const route: string[] = [];
-    let len: number = Infinity;
-
-
-    if (distances[vNodeId] === Infinity) {
-      console.log(`No path exists from ${uNodeId} to ${vNodeId}.`);
-      return { route: route, len: len };
-    }else{
-      let currentNodeId: string | null = vNodeId;
-      len = distances[vNodeId]
-
-      while(currentNodeId){
-        route.unshift(currentNodeId);
-        currentNodeId = previous[currentNodeId];
-      }
+    let current = end;
+    while (current !== null && current !== start) {
+      route.unshift(current);
+      current = previous[current]!;
     }
-    return {route, len};
+
+    if (current === start) {
+      route.unshift(start);
+      const result = { route, len: distances[end] };
+      this.shortestPathCache.set(key, result);
+      return result;
+    }
+
+    return { route: [], len: Infinity };
   }
+
 
   public subdivideGraph(quantizeLen: number): Graph{
     const newGraph = new Graph;
@@ -362,6 +386,8 @@ class TransportMicroSimulator{
   }
 
   public step(): void{
+    const newSimServices: SimulationService[] = [];
+
     for(const simService of this.simServices){
 
       // Case 1: stationary
@@ -382,7 +408,7 @@ class TransportMicroSimulator{
         let distToGo = projectedDistance;
         let currentNode = simService.position;
         for(let i = 1; i< nextStopRoute.length; i++){
-          const e = this.graph.edges.find(e => e.u === currentNode && e.v === nextStopRoute[i]);
+          const e = this.graph.getEdge(currentNode, nextStopRoute[i]);
           if(!e) break;
           if (e.len <= distToGo || i === 1){
             currentNode = e.v;
@@ -397,7 +423,11 @@ class TransportMicroSimulator{
         simService.state = "cruising";
 
       }
+      console.log(`${simService.service.vehicle.name} in state ${simService.state} in position ${simService.position}`);
+      newSimServices.push(simService);
     }
+
+    this.simServices = newSimServices;
   }
 }
 
@@ -498,7 +528,7 @@ const r: TransportService = {
   "vehicle":veh
 }
 
-const sim = new TransportMicroSimulator(loopGraph, [r], 100,10,200)
+const sim = new TransportMicroSimulator(loopGraph, [r], 1,2,200)
 sim.run();
 
 saveSimLogToFile(sim.log, `sim-outputs/simlog-${Date.now()}`);
