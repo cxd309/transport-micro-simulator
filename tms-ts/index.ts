@@ -36,7 +36,7 @@ class Graph{
   private shortestPathCache: Map<string, { route: string[], len: number }>
 
 
-  constructor(){
+  constructor(graphData: GraphData = {"edges":[], "nodes":[]}){
     this.edges = [];
     this.nodes = [];
     this.edgeMap = new Map();
@@ -187,89 +187,13 @@ class Graph{
     return { route: [], len: Infinity };
   }
 
-
-  public subdivideGraph(quantizeLen: number): Graph{
-    const newGraph = new Graph;
-
-    newGraph.addNodeList(this.nodes);
-
-    let subNodeCount = 0;
-    let subEdgeCount = 0;
-
-    for (const e of this.edges){
-      const {u, v, len, edgeID} = e;
-
-      if (len <= quantizeLen){
-        newGraph.addEdge({
-          "edgeID": edgeID,
-          "len": quantizeLen,
-          "u": u,
-          "v": v
-        });
-        continue;
-      }
-      
-      const uNode = this.nodes.find(n => n.nodeID === u);
-      const vNode = this.nodes.find(n=> n.nodeID === v);
-
-      if (!uNode || !vNode) {
-        console.warn(`Edge ${e.edgeID} refers to non-existent nodes.`);
-        continue;
-      }
-
-      const n_subedges = Math.ceil(len / quantizeLen);
-
-      const dx = (vNode.loc.x - uNode.loc.x)/n_subedges;
-      const dy = (vNode.loc.y - uNode.loc.y)/n_subedges;
-      
-      let prevNodeID = u;
-      
-      for (let i = 1; i< n_subedges; i++){
-        const subNodeID = `SUBNODE.${edgeID}.${i}`;
-        const subEdgeID = `SUBEDGE.${edgeID}.${i}`;
-
-        const newNode: GraphNode = {
-          nodeID: subNodeID,
-          type: uNode.type,
-          loc: {
-            x: uNode.loc.x + i * dx,
-            y: uNode.loc.y + i * dy,
-          }
-        };
-
-        const newEdge: GraphEdge = {
-          edgeID: subEdgeID,
-          u: prevNodeID,
-          v: subNodeID,
-          len: quantizeLen,
-          parentEdge: edgeID
-        };
-
-        newGraph.addNode(newNode);
-        newGraph.addEdge(newEdge);
-
-        prevNodeID = subNodeID;
-      }
-
-      // Final edge
-      newGraph.addEdge({
-        edgeID: `SUBEDGE.${edgeID}.${n_subedges}`,
-        u: prevNodeID,
-        v: v,
-        len: quantizeLen,
-        parentEdge: e.edgeID
-      });
-    }
-
-    return newGraph;
-  }
-
   public toJSON(): GraphData{
     return {
       nodes: this.nodes,
       edges: this.edges
     };
   }
+
 }
 
 interface RouteStop{
@@ -357,9 +281,7 @@ class TransportMicroSimulator{
   log: SimLog[];
 
   constructor(graphData: GraphData, services: TransportService[], quantizeLen: number, timeStep: number, duration: number){
-    const g = new Graph();
-    g.addGraphData(graphData)
-    this.graph = g.subdivideGraph(quantizeLen);
+    this.graph = new Graph(graphData);
     this.timeStep = timeStep;
     this.simServices = [];
     this.duration = duration
