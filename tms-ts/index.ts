@@ -64,7 +64,7 @@ class Graph{
 
     if(uniqueNode){
       this.nodes.push(newNode);
-      //console.log(`Node with id ${newNode.nodeID} added.`);
+      console.log(`Node with id ${newNode.nodeID} added.`);
     }else{
       console.log(`Node with id ${newNode.nodeID} already exists.`);
     }
@@ -78,7 +78,7 @@ class Graph{
     if (uniqueEdge && validNodes) {
       this.edges.push(newEdge);
       this.edgeMap.set(this.getEdgeKey(newEdge.u, newEdge.v), newEdge);
-      //console.log(`Edge with id ${newEdge.edgeID} added.`);
+      console.log(`Edge with id ${newEdge.edgeID} added.`);
     } else if(!uniqueEdge){
       console.log(`Edge with id ${newEdge.edgeID} already exists.`);
     } else {
@@ -229,6 +229,8 @@ class SimulationService{
   s_acc: number;
   s_dcc: number;
   remainingDwell: number;
+  currentEdge?: GraphEdge;
+  distanceAlongEdge: number;
 
   constructor(service: TransportService){
     this.service = service;
@@ -246,6 +248,8 @@ class SimulationService{
     this.s_dcc = (this.service.vehicle.v_max ** 2)/(2 * this.service.vehicle.a_dcc);
 
     this.remainingDwell = 0;
+    this.distanceAlongEdge = 0;
+    this.currentEdge = undefined;
   }
 
   public advanceDwell(timeStep: number): void{
@@ -261,6 +265,8 @@ class SimulationService{
     this.position = this.nextStop;
     this.velocity = 0;
     this.state = "stationary";
+    this.currentEdge = undefined;
+    this.distanceAlongEdge = 0;
 
     const stopIndex = this.service.stops.findIndex(stop => stop.nodeID === this.position) ?? 0;
 
@@ -281,6 +287,7 @@ class TransportMicroSimulator{
   log: SimLog[];
 
   constructor(graphData: GraphData, services: TransportService[], quantizeLen: number, timeStep: number, duration: number){
+    console.log("building simulator basis");
     this.graph = new Graph(graphData);
     this.timeStep = timeStep;
     this.simServices = [];
@@ -294,6 +301,7 @@ class TransportMicroSimulator{
   }
 
   public run(): void{
+    console.log("running simulation");
     for(let i = 0; i<(this.duration/this.timeStep); i++){
       this.step();
       this.logState(i*this.timeStep);
@@ -308,48 +316,79 @@ class TransportMicroSimulator{
   }
 
   public step(): void{
+    console.log("stepping");
     const newSimServices: SimulationService[] = [];
 
     for(const simService of this.simServices){
 
       // Case 1: stationary
       if(simService.remainingDwell > 0){
-        simService.advanceDwell(this.timeStep);
+        console.log("dwelling");
+        simService.advanceDwell(this.timeStep); // if timestep is greater than remaining dwell then nothing extra will happen
         continue;
       }
 
       // Case 2: cruising
-      const {route: nextStopRoute, len: nextStopLen} = this.graph.shortestPath(simService.position, simService.nextStop);
-      const projectedDistance = simService.service.vehicle.v_max * this.timeStep;
+      console.log("cruising")
+      const vehicle = simService.service.vehicle;
+      const speed = vehicle.v_max;
+      const distToTravel = speed * this.timeStep;
 
-      if(nextStopLen <= projectedDistance || nextStopRoute.length === 2){
-        // arrived at station
-        simService.startDwell();
-      }else{
-        // move the correct number of nodes
-        let distToGo = projectedDistance;
-        let currentNode = simService.position;
-        for(let i = 1; i< nextStopRoute.length; i++){
-          const e = this.graph.getEdge(currentNode, nextStopRoute[i]);
-          if(!e) break;
-          if (e.len <= distToGo || i === 1){
-            currentNode = e.v;
-            distToGo-=e.len;
-          }else{
+      let remainingDist = distToTravel;
+
+      while(remainingDist>0){
+        console.log(`remaining distance - ${remainingDist}`);
+        if(!simService.currentEdge){
+          console.log("no current edge")
+          const {route} = this.graph.shortestPath(simService.position, simService.nextStop);
+          console.log("route found")
+          if(route.length<2){
+            simService.startDwell;
             break;
           }
+
+          const nextEdge = this.graph.getEdge(route[0], route[1]);
+          if(!nextEdge){
+            console.warn("Missing edge:", route[0], "->", route[1]);
+            break;
+          }
+
+          simService.currentEdge = nextEdge;
+          simService.distanceAlongEdge = 0;
+
+          console.log(`new edge found ${simService.currentEdge.edgeID}`)
         }
 
-        simService.position = currentNode;
-        simService.velocity = simService.service.vehicle.v_max;
-        simService.state = "cruising";
+        const edge = simService.currentEdge;
+        const remainingEdgeLength = edge.len - simService.distanceAlongEdge;
 
+        if (remainingDist >= remainingEdgeLength) {
+          // Finish this edge
+          remainingDist -= remainingEdgeLength;
+          simService.position = edge.v;
+          simService.currentEdge = undefined;
+          simService.distanceAlongEdge = 0;
+
+          if (edge.v === simService.nextStop) {
+            simService.startDwell();
+            break;
+          }
+        } else {
+          // Still moving on current edge
+          simService.distanceAlongEdge += remainingDist;
+          remainingDist = 0;
+        }
       }
-      console.log(`${simService.service.vehicle.name} in state ${simService.state} in position ${simService.position}`);
-      newSimServices.push(simService);
-    }
 
-    this.simServices = newSimServices;
+      simService.velocity = speed;
+      simService.state = "cruising";
+          console.log(
+        `${vehicle.name} [${simService.service.serviceID}] at node ${simService.position} ` +
+        (simService.currentEdge
+          ? `on edge ${simService.currentEdge.edgeID}, ${simService.distanceAlongEdge.toFixed(2)}m`
+          : `stationary at stop`)
+      );
+    }
   }
 }
 
@@ -432,18 +471,15 @@ const r: TransportService = {
       "nodeID": "STN.001",
       "t_dwell": 60
     },{
-      "nodeID": "STN.003",
+      "nodeID": "STN.005",
       "t_dwell": 60
     },{
       "nodeID": "STN.010",
       "t_dwell": 60
     },{
-      "nodeID": "STN.015",
+      "nodeID": "STN.15",
       "t_dwell": 60
-    },{
-      "nodeID": "STN.018",
-      "t_dwell": 60
-    },
+    }
   ],
   "serviceID":"SVC.001",
   "startNodeID":"STN.001",
