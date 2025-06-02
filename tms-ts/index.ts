@@ -41,6 +41,10 @@ class Graph{
     this.nodes = [];
     this.edgeMap = new Map();
     this.shortestPathCache = new Map();
+
+    if (graphData.edges.length > 0 || graphData.nodes.length > 0) {
+      this.addGraphData(graphData);
+    }
   }
 
   private getEdgeKey(u: string, v: string): string {
@@ -74,6 +78,8 @@ class Graph{
   public addEdge(newEdge: GraphEdge): boolean {
     const validNodes = this.checkNodeExistance(newEdge.u) && this.checkNodeExistance(newEdge.v);
     const uniqueEdge = !this.checkEdgeExistance(newEdge.edgeID);
+
+    this.clearPathCache()
 
     if (uniqueEdge && validNodes) {
       this.edges.push(newEdge);
@@ -113,6 +119,7 @@ class Graph{
     this.addNodeList(graphData.nodes);
     this.addEdgeList(graphData.edges);
     console.log("graph data added");
+    this.precomputeAllShortestPaths();
   }
 
   public dijkstra(startNodeId: string): {distances: Record<string, number>, previous: Record<string, string | null>}{
@@ -194,7 +201,42 @@ class Graph{
     };
   }
 
+  public clearPathCache(): void {
+    this.shortestPathCache.clear();
+  }
+
+  public precomputeAllShortestPaths(): void {
+    console.log("Precomputing all shortest paths...");
+    for (const startNode of this.nodes) {
+      const { distances, previous } = this.dijkstra(startNode.nodeID);
+      for (const endNode of this.nodes) {
+        const startId = startNode.nodeID;
+        const endId = endNode.nodeID;
+        if (startId === endId) continue;
+
+        const key = this.getPathKey(startId, endId);
+        if (this.shortestPathCache.has(key)) continue;
+
+        const route: string[] = [];
+        let current = endId;
+        while (current !== null && current !== startId) {
+          route.unshift(current);
+          current = previous[current]!;
+        }
+
+        if (current === startId) {
+          route.unshift(startId);
+          this.shortestPathCache.set(key, { route, len: distances[endId] });
+        }
+      }
+    }
+    console.log(`Precomputed ${this.shortestPathCache.size} shortest paths.`);
+  }
+
+
 }
+
+
 
 interface RouteStop{
   nodeID: string; // nodeID for the stop
@@ -316,20 +358,17 @@ class TransportMicroSimulator{
   }
 
   public step(): void{
-    console.log("stepping");
     const newSimServices: SimulationService[] = [];
 
     for(const simService of this.simServices){
 
       // Case 1: stationary
       if(simService.remainingDwell > 0){
-        console.log("dwelling");
         simService.advanceDwell(this.timeStep); // if timestep is greater than remaining dwell then nothing extra will happen
         continue;
       }
 
       // Case 2: cruising
-      console.log("cruising")
       const vehicle = simService.service.vehicle;
       const speed = vehicle.v_max;
       const distToTravel = speed * this.timeStep;
@@ -337,11 +376,8 @@ class TransportMicroSimulator{
       let remainingDist = distToTravel;
 
       while(remainingDist>0){
-        console.log(`remaining distance - ${remainingDist}`);
         if(!simService.currentEdge){
-          console.log("no current edge")
           const {route} = this.graph.shortestPath(simService.position, simService.nextStop);
-          console.log("route found")
           if(route.length<2){
             simService.startDwell;
             break;
@@ -355,8 +391,6 @@ class TransportMicroSimulator{
 
           simService.currentEdge = nextEdge;
           simService.distanceAlongEdge = 0;
-
-          console.log(`new edge found ${simService.currentEdge.edgeID}`)
         }
 
         const edge = simService.currentEdge;
