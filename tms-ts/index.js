@@ -123,6 +123,7 @@ class Graph {
         const cached = this.shortestPathCache.get(key);
         if (cached)
             return cached;
+        console.log("not a cached path");
         const { distances, previous } = this.dijkstra(start);
         const route = [];
         let current = end;
@@ -215,23 +216,22 @@ class SimulationService {
     }
 }
 class TransportMicroSimulator {
-    constructor(graphData, services, quantizeLen, timeStep, duration) {
+    constructor(graphData, services) {
         console.log("building simulator basis");
         this.graph = new Graph(graphData);
-        this.timeStep = timeStep;
         this.simServices = [];
-        this.duration = duration;
         this.log = [];
         for (const s of services) {
             const simService = new SimulationService(s);
             this.simServices.push(simService);
         }
     }
-    run() {
+    run(timeStep, duration) {
         console.log("running simulation");
-        for (let i = 0; i < (this.duration / this.timeStep); i++) {
-            this.step();
-            this.logState(i * this.timeStep);
+        for (let i = 0; i < (duration / timeStep); i++) {
+            console.log(`timeStep: ${(i * timeStep).toFixed(1)}s`);
+            this.step(timeStep);
+            this.logState(i * timeStep);
         }
     }
     logState(timestamp) {
@@ -240,21 +240,26 @@ class TransportMicroSimulator {
             "services": this.simServices
         });
     }
-    step() {
+    step(timeStep) {
         const newSimServices = [];
         for (const simService of this.simServices) {
+            const vehicle = simService.service.vehicle;
+            const speed = vehicle.v_max;
+            const distToTravel = speed * timeStep;
+            let remainingDist = distToTravel;
+            console.log(`${vehicle.name} [${simService.service.serviceID}] at node ${simService.position} ` +
+                (simService.currentEdge
+                    ? `on edge ${simService.currentEdge.edgeID}, ${simService.distanceAlongEdge.toFixed(2)}m`
+                    : `stationary at stop with ${simService.remainingDwell.toFixed(1)} remaining dwell`));
             // Case 1: stationary
             if (simService.remainingDwell > 0) {
-                simService.advanceDwell(this.timeStep); // if timestep is greater than remaining dwell then nothing extra will happen
+                simService.advanceDwell(timeStep); // if timestep is greater than remaining dwell then nothing extra will happen
                 continue;
             }
             // Case 2: cruising
-            const vehicle = simService.service.vehicle;
-            const speed = vehicle.v_max;
-            const distToTravel = speed * this.timeStep;
-            let remainingDist = distToTravel;
             while (remainingDist > 0) {
                 if (!simService.currentEdge) {
+                    console.log("searching shortest path");
                     const { route } = this.graph.shortestPath(simService.position, simService.nextStop);
                     if (route.length < 2) {
                         simService.startDwell;
@@ -289,54 +294,46 @@ class TransportMicroSimulator {
             }
             simService.velocity = speed;
             simService.state = "cruising";
-            console.log(`${vehicle.name} [${simService.service.serviceID}] at node ${simService.position} ` +
-                (simService.currentEdge
-                    ? `on edge ${simService.currentEdge.edgeID}, ${simService.distanceAlongEdge.toFixed(2)}m`
-                    : `stationary at stop`));
         }
     }
 }
 function zeroPad(num, size = 3) {
     return num.toString().padStart(size, '0');
 }
-function createBasicLoopGraph() {
-    const n_stn = 20;
-    const s_is = 2000;
-    const s_stn = 100;
-    const nodes = [];
-    const edges = [];
+function createBasicLoopGraph(n_stn, s_is, s_stn) {
+    const gData = { "nodes": [], "edges": [] };
     for (let i = 0; i < n_stn; i++) {
         const stnID = `STN.${zeroPad(i + 1)}`;
         const trkID = `TRK.${zeroPad(i + 1)}`;
         // Add station node
-        nodes.push({
+        gData.nodes.push({
             nodeID: stnID,
             loc: { x: Math.cos((2 * Math.PI * i) / n_stn), y: Math.sin((2 * Math.PI * i) / n_stn) },
             type: "station",
         });
         // Add track node
-        nodes.push({
+        gData.nodes.push({
             nodeID: trkID,
             loc: { x: Math.cos((2 * Math.PI * (i + 0.5)) / n_stn), y: Math.sin((2 * Math.PI * (i + 0.5)) / n_stn) },
             type: "main",
         });
         // Edge from station to track
-        edges.push({
-            edgeID: `E${zeroPad(edges.length + 1)}`,
+        gData.edges.push({
+            edgeID: `E${zeroPad(gData.edges.length + 1)}`,
             u: stnID,
             v: trkID,
             len: s_stn / 2,
         });
         // Edge from track to next station
         const nextStationId = `STN.${zeroPad((i + 1) % n_stn + 1)}`;
-        edges.push({
-            edgeID: `E${zeroPad(edges.length + 1)}`,
+        gData.edges.push({
+            edgeID: `E${zeroPad(gData.edges.length + 1)}`,
             u: trkID,
             v: nextStationId,
             len: s_is,
         });
     }
-    return { nodes, edges };
+    return gData;
 }
 function saveGraphToFile(graph, filePath) {
     const graphData = graph.toJSON();
@@ -344,12 +341,26 @@ function saveGraphToFile(graph, filePath) {
     fs_1.default.writeFileSync(filePath, jsonString, 'utf8');
     console.log(`Graph saved to ${filePath}`);
 }
+function saveGraphToDrawIO(graph, filePath) {
+    //example from draw.io
+    //;Example:
+    //a->b
+    //b->edge label->c
+    //c->a
+    const outputList = [";graph:"];
+    for (const e of graph.edges) {
+        outputList.push(`${e.u}->${e.edgeID}(${e.len}m)->${e.v}`);
+    }
+    const outputString = outputList.join("\n");
+    fs_1.default.writeFileSync(filePath, outputList.join("\n"), 'utf-8');
+    console.log(`Graph saved to ${filePath}`);
+}
 function saveSimLogToFile(log, filePath) {
     const jsonString = JSON.stringify(log, null, 2); // pretty-print with 2 spaces
     fs_1.default.writeFileSync(filePath, jsonString, 'utf8');
     console.log(`Graph saved to ${filePath}`);
 }
-const loopGraph = createBasicLoopGraph();
+const loopGraph = createBasicLoopGraph(20, 2000, 50);
 const veh = {
     "a_acc": 1,
     "a_dcc": 1,
@@ -368,7 +379,7 @@ const r = {
             "nodeID": "STN.010",
             "t_dwell": 60
         }, {
-            "nodeID": "STN.15",
+            "nodeID": "STN.015",
             "t_dwell": 60
         }
     ],
@@ -376,8 +387,9 @@ const r = {
     "startNodeID": "STN.001",
     "vehicle": veh
 };
-const sim = new TransportMicroSimulator(loopGraph, [r], 1, 2, 200);
-sim.run();
+const sim = new TransportMicroSimulator(loopGraph, [r]);
+saveGraphToDrawIO(sim.graph, `sim-outputs/graph-${Date.now()}`);
+sim.run(0.1, 2000);
 saveSimLogToFile(sim.log, `sim-outputs/simlog-${Date.now()}`);
 //const { route, len } = graph.shortestPath('E', 'A'); // Find shortest path from node "A"
 //console.log(route); // Shortest distances from node A
