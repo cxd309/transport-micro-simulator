@@ -1,0 +1,75 @@
+if(simService.remainingDwell > 0){ // there is remaining dwell
+        simService.advanceDwell(timeStep);
+      }else{
+        let remainingTime = timeStep;
+        while(remainingTime> 0){
+          if(!simService.currentEdge){
+            const {route} = this.graph.shortestPath(simService.position, simService.nextStop);
+            if(route.length< 2){
+              simService.startDwell();
+              break
+            }
+            const nextEdge = this.graph.getEdge(route[0], route[1]);
+            if(!nextEdge){
+              console.warn(`Missing edge: ${this.graph.getEdgeKey(route[0], route[1])}`);
+              break;
+            }
+            simService.currentEdge = nextEdge;
+            simService.distanceAlongEdge = 0;
+
+          }
+
+          const edge = simService.currentEdge;
+          const remainingEdge = edge.len - simService.distanceAlongEdge;
+          
+          // determine the state of the service
+          if (simService.velocity === 0) {
+            simService.state = "accelerating";
+          } else if (remainingEdge <= simService.s_dcc) {
+            simService.state = "decelerating";
+          } else if (simService.velocity < simService.service.vehicle.v_max) {
+            simService.state = "accelerating";
+          } else {
+            simService.state = "cruising";
+          }
+
+          let a = 0;
+          switch(simService.state){
+            case "accelerating":
+              a = simService.service.vehicle.a_acc;
+              break;
+            case "decelerating":
+              a = - simService.service.vehicle.a_dcc;
+              break;
+            case "cruising":
+              a = 0;
+              break;
+          }
+
+          const v_u= simService.velocity;
+          const v_v= Math.min(Math.max(v_u + a*remainingTime, 0), simService.service.vehicle.v_max);
+          const s_travelled= remainingTime*((v_u+v_v)/2);
+          
+          if(s_travelled>= remainingEdge){
+            const timeToNode = timeToReachDistance(remainingEdge, v_u, a);
+            simService.distanceAlongEdge = 0;
+            simService.position = edge.v;
+            simService.currentEdge = undefined;
+            simService.velocity = 0;
+
+            remainingTime -= timeToNode;
+
+            if(edge.v === simService.nextStop){
+              simService.startDwell();
+              break;
+            }
+
+            continue;
+          } else{
+            simService.velocity = v_v;
+            simService.distanceAlongEdge += s_travelled;
+            remainingTime = 0;
+          }
+        }
+      }
+      newSimServices.push(simService);

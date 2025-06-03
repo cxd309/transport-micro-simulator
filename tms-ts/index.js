@@ -193,26 +193,70 @@ class SimulationService {
         this.distanceAlongEdge = 0;
         this.currentEdge = undefined;
     }
+    findNextEdge(g) {
+        // use the current position and the route to the next stop to find the next edge
+        // on that path
+        const { route } = g.shortestPath(this.position, this.nextStop);
+        if (route.length < 2) {
+            console.warn("current position is equal to next step, no edge to find");
+        }
+        else {
+            const nextEdge = g.getEdge(route[0], route[1]);
+            if (!nextEdge) {
+                console.warn(`Cannot find next edge, there is no edge from ${g.getEdgeKey(route[0], route[1])}`);
+            }
+            else {
+                this.currentEdge = nextEdge;
+                this.distanceAlongEdge = 0;
+            }
+        }
+    }
+    startDwell(remainingTime, g) {
+        var _a;
+        // set the vehicle to stationary
+        this.velocity = 0;
+        this.state = "stationary";
+        // change the current node position of the vehicle
+        this.position = this.nextStop;
+        // find the index of the current position
+        const curStopIndex = (_a = this.service.stops.findIndex(stop => stop.nodeID === this.position)) !== null && _a !== void 0 ? _a : 0;
+        const nextStopIndex = (curStopIndex + 1) % this.service.stops.length;
+        // set the dwell time
+        this.remainingDwell = this.service.stops[curStopIndex].t_dwell;
+        // set the next stop
+        this.nextStop = this.service.stops[nextStopIndex].nodeID;
+        // update the current edge
+        this.findNextEdge(g);
+    }
     advanceDwell(timeStep) {
         this.remainingDwell -= timeStep;
         if (this.remainingDwell <= 0) {
             this.remainingDwell = 0;
-            this.velocity = this.service.vehicle.v_max;
-            this.state = "cruising";
+            this.velocity = 0;
+            this.state = "accelerating";
         }
     }
-    startDwell() {
-        var _a;
-        this.position = this.nextStop;
-        this.velocity = 0;
-        this.state = "stationary";
-        this.currentEdge = undefined;
-        this.distanceAlongEdge = 0;
-        const stopIndex = (_a = this.service.stops.findIndex(stop => stop.nodeID === this.position)) !== null && _a !== void 0 ? _a : 0;
-        // set the dwell time
-        this.remainingDwell = this.service.stops[stopIndex].t_dwell;
-        // find the new nextStop
-        this.nextStop = this.service.stops[(stopIndex + 1) % this.service.stops.length].nodeID;
+    updatePosition(timeStep, graph) {
+        if (this.remainingDwell > 0) { // check if remainingdwell - timeStep < 0
+            this.advanceDwell(timeStep);
+        }
+        else {
+            this.moveVehicle(timeStep, graph);
+        }
+    }
+    moveVehicle(timeStep, g) {
+        // start by making a tracker for the remaining time and then 
+        // itterate over, removing chunks of that time
+        if (!this.currentEdge) {
+            this.findNextEdge(g);
+        }
+        let remainingTime = timeStep;
+        while (remainingTime > 0) {
+            const remainingEdgeLen = this.currentEdge.len - this.distanceAlongEdge;
+            const { len: distanceToNextStop } = g.shortestPath(this.position, this.nextStop) - this.distanceAlongEdge;
+            console.log(distanceToNextStop + 1);
+            // determine the state of the service
+        }
     }
 }
 class TransportMicroSimulator {
@@ -232,6 +276,11 @@ class TransportMicroSimulator {
             console.log(`timeStep: ${(i * timeStep).toFixed(1)}s`);
             this.step(timeStep);
             this.logState(i * timeStep);
+            this.simServices.forEach(v => console.log(v.position !== null && v.currentEdge
+                ? `Vehicle ${v.service.serviceID} at ${v.distanceAlongEdge.toFixed(1)}m along edge ${v.currentEdge.edgeID} at speed ${v.velocity.toFixed(2)}`
+                : v.position
+                    ? `Vehicle ${v.service.serviceID} at node ${v.position} at speed ${v.velocity.toFixed(2)} with remaining dwell ${v.remainingDwell.toFixed(1)}`
+                    : `Vehicle ${v.service.serviceID} is in an unknown state`));
         }
     }
     logState(timestamp) {
@@ -243,59 +292,28 @@ class TransportMicroSimulator {
     step(timeStep) {
         const newSimServices = [];
         for (const simService of this.simServices) {
-            const vehicle = simService.service.vehicle;
-            const speed = vehicle.v_max;
-            const distToTravel = speed * timeStep;
-            let remainingDist = distToTravel;
-            console.log(`${vehicle.name} [${simService.service.serviceID}] at node ${simService.position} ` +
-                (simService.currentEdge
-                    ? `on edge ${simService.currentEdge.edgeID}, ${simService.distanceAlongEdge.toFixed(2)}m`
-                    : `stationary at stop with ${simService.remainingDwell.toFixed(1)} remaining dwell`));
-            // Case 1: stationary
-            if (simService.remainingDwell > 0) {
-                simService.advanceDwell(timeStep); // if timestep is greater than remaining dwell then nothing extra will happen
-                continue;
-            }
-            // Case 2: cruising
-            while (remainingDist > 0) {
-                if (!simService.currentEdge) {
-                    console.log("searching shortest path");
-                    const { route } = this.graph.shortestPath(simService.position, simService.nextStop);
-                    if (route.length < 2) {
-                        simService.startDwell;
-                        break;
-                    }
-                    const nextEdge = this.graph.getEdge(route[0], route[1]);
-                    if (!nextEdge) {
-                        console.warn("Missing edge:", route[0], "->", route[1]);
-                        break;
-                    }
-                    simService.currentEdge = nextEdge;
-                    simService.distanceAlongEdge = 0;
-                }
-                const edge = simService.currentEdge;
-                const remainingEdgeLength = edge.len - simService.distanceAlongEdge;
-                if (remainingDist >= remainingEdgeLength) {
-                    // Finish this edge
-                    remainingDist -= remainingEdgeLength;
-                    simService.position = edge.v;
-                    simService.currentEdge = undefined;
-                    simService.distanceAlongEdge = 0;
-                    if (edge.v === simService.nextStop) {
-                        simService.startDwell();
-                        break;
-                    }
-                }
-                else {
-                    // Still moving on current edge
-                    simService.distanceAlongEdge += remainingDist;
-                    remainingDist = 0;
-                }
-            }
-            simService.velocity = speed;
-            simService.state = "cruising";
+            simService.updatePosition(timeStep, this.graph);
+            newSimServices.push(simService);
+        }
+        this.simServices = newSimServices;
+    }
+}
+function timeToReachDistance(s, v_u, a) {
+    const min_speed = 0.001; // to prevent divide-by-zero
+    let time = 0;
+    if (a !== 0) {
+        const dis = (v_u ** 2) + (2 * a * s);
+        if (dis < 0) {
+            // Not physically reachable with current parameters
+            return s / Math.max(v_u, min_speed);
+        }
+        time = (-v_u + Math.sqrt(dis)) / a;
+        // Time must be positive and real
+        if (!(time > 0 && isFinite(time))) {
+            time = s / Math.max(v_u, min_speed);
         }
     }
+    return time;
 }
 function zeroPad(num, size = 3) {
     return num.toString().padStart(size, '0');
@@ -389,7 +407,7 @@ const r = {
 };
 const sim = new TransportMicroSimulator(loopGraph, [r]);
 saveGraphToDrawIO(sim.graph, `sim-outputs/graph-${Date.now()}`);
-sim.run(0.1, 2000);
+sim.run(1, 2000);
 saveSimLogToFile(sim.log, `sim-outputs/simlog-${Date.now()}`);
 //const { route, len } = graph.shortestPath('E', 'A'); // Find shortest path from node "A"
 //console.log(route); // Shortest distances from node A
