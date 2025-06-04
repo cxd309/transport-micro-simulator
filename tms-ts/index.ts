@@ -295,9 +295,9 @@ class SimulationService{
     this.currentEdge = undefined;
   }
 
-  public findNextEdge(g: Graph): void{
-    // use the current position and the route to the next stop to find the next edge
-    // on that path
+  public setEdgeFromPosition(g: Graph): void{
+    // use the current position and the route to the next stop to find 
+    // the next edge on that path
 
     const {route} = g.shortestPath(this.position, this.nextStop);
     
@@ -312,28 +312,21 @@ class SimulationService{
         this.distanceAlongEdge = 0;
       }
     }
-
   }
 
-  public startDwell(remainingTime: number, g:Graph): void{
+  public startDwell(remainingTime: number): void{
     // set the vehicle to stationary
     this.velocity= 0;
     this.state= "stationary";
-    
-    // change the current node position of the vehicle
-    this.position= this.nextStop;
     
     // find the index of the current position
     const curStopIndex= this.service.stops.findIndex(stop => stop.nodeID === this.position) ?? 0;
     const nextStopIndex = (curStopIndex + 1)% this.service.stops.length;
 
     // set the dwell time
-    this.remainingDwell = this.service.stops[curStopIndex].t_dwell;
+    this.remainingDwell = this.service.stops[curStopIndex].t_dwell - remainingTime;
     // set the next stop
     this.nextStop = this.service.stops[nextStopIndex].nodeID;
-
-    // update the current edge
-    this.findNextEdge(g);
   }
 
   public advanceDwell(timeStep: number): void{
@@ -421,14 +414,14 @@ class SimulationService{
   public moveToNextEdge(g: Graph): void{
     this.position = this.currentEdge?.v ?? "";
     this.distanceAlongEdge = 0;
-    this.findNextEdge(g);
+    this.setEdgeFromPosition(g);
   }
 
   public moveVehicle(timeStep: number, g: Graph): void{
     // start by making a tracker for the remaining time and then 
     // itterate over, removing chunks of that time
     if(!this.currentEdge){
-      this.findNextEdge(g);
+      this.setEdgeFromPosition(g);
     }
     
     let remainingTime= timeStep;
@@ -445,22 +438,26 @@ class SimulationService{
       if(s_travelled>=remainingEdgeLen){
         // find the time taken to travel to the end of the edge
         const timeToNode = this.findTimeToTravelDistance(remainingEdgeLen, a);
+        // remove from remainingTime
+        remainingTime = remainingTime - timeToNode
         // find the speed at the node
         const {v_final: vAtNode} = this.findDistanceTravelledInTime(timeToNode);
         v_final = vAtNode;
         // move to the next edge
         this.moveToNextEdge(g);
-        // remove the time remaining
-        remainingTime = remainingTime - timeToNode
         // check if it's reached a station
-        
+        if(this.nextStop === this.currentEdge?.v){
+          this.startDwell(remainingTime);
+          remainingTime = 0; //startDwell will handle the remainingTime
+        }
+      }else{
+        // move along the edge
+        this.distanceAlongEdge -= s_travelled;
+        // remove the time remaining
+        remainingTime = 0;
       }
-
-      // check if it's reached a station
       // update the final speed (considering if the time has adjusted)
-      // move along the edge
-      // remove the time remaining
-
+      this.velocity = v_final;
     }
   }
 }
@@ -629,7 +626,7 @@ const r: TransportService = {
 
 const sim = new TransportMicroSimulator(loopGraph, [r])
 saveGraphToDrawIO(sim.graph, `sim-outputs/graph-${Date.now()}`);
-sim.run(1, 2000);
+sim.run(1, 20);
 
 saveSimLogToFile(sim.log, `sim-outputs/simlog-${Date.now()}`);
 
