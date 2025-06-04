@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const fs_1 = __importDefault(require("fs"));
+let CUR_TIME = 0;
 class Graph {
     constructor(graphData = { "edges": [], "nodes": [] }) {
         this.edges = [];
@@ -30,10 +31,10 @@ class Graph {
         const uniqueNode = !this.checkNodeExistance(newNode.nodeID);
         if (uniqueNode) {
             this.nodes.push(newNode);
-            console.log(`Node with id ${newNode.nodeID} added.`);
+            //console.log(`Node with id ${newNode.nodeID} added.`);
         }
         else {
-            console.log(`Node with id ${newNode.nodeID} already exists.`);
+            console.warn(`Node with id ${newNode.nodeID} already exists.`);
         }
         return uniqueNode;
     }
@@ -44,17 +45,17 @@ class Graph {
         if (uniqueEdge && validNodes) {
             this.edges.push(newEdge);
             this.edgeMap.set(this.getEdgeKey(newEdge.u, newEdge.v), newEdge);
-            console.log(`Edge with id ${newEdge.edgeID} added.`);
+            //console.log(`Edge with id ${newEdge.edgeID} added.`);
         }
         else if (!uniqueEdge) {
-            console.log(`Edge with id ${newEdge.edgeID} already exists.`);
+            console.warn(`Edge with id ${newEdge.edgeID} already exists.`);
         }
         else {
             if (!this.checkNodeExistance(newEdge.u)) {
-                console.log(`Node with id ${newEdge.u} does not exist.`);
+                console.warn(`Node with id ${newEdge.u} does not exist.`);
             }
             else {
-                console.log(`Node with id ${newEdge.v} does not exist.`);
+                console.warn(`Node with id ${newEdge.v} does not exist.`);
             }
         }
         return uniqueEdge && validNodes;
@@ -123,7 +124,7 @@ class Graph {
         const cached = this.shortestPathCache.get(key);
         if (cached)
             return cached;
-        console.log("not a cached path");
+        console.log(`${key} is not a cached path`);
         const { distances, previous } = this.dijkstra(start);
         const route = [];
         let current = end;
@@ -211,18 +212,20 @@ class SimulationService {
             }
         }
     }
-    startDwell(remainingTime) {
+    startDwell(remainingTime, g) {
         var _a;
         // set the vehicle to stationary
         this.velocity = 0;
         this.state = "stationary";
         // find the index of the current position
-        const curStopIndex = (_a = this.service.stops.findIndex(stop => stop.nodeID === this.position)) !== null && _a !== void 0 ? _a : 0;
+        const curStopIndex = (_a = this.service.stops.findIndex(stop => { var _a; return stop.nodeID === ((_a = this.currentEdge) === null || _a === void 0 ? void 0 : _a.v); })) !== null && _a !== void 0 ? _a : 0;
         const nextStopIndex = (curStopIndex + 1) % this.service.stops.length;
         // set the dwell time
         this.remainingDwell = this.service.stops[curStopIndex].t_dwell - remainingTime;
         // set the next stop
         this.nextStop = this.service.stops[nextStopIndex].nodeID;
+        // move to the next edge
+        this.moveToNextEdge(g);
     }
     advanceDwell(timeStep) {
         this.remainingDwell -= timeStep;
@@ -234,16 +237,14 @@ class SimulationService {
     }
     updatePosition(timeStep, graph) {
         if (this.remainingDwell > 0) { // check if remainingdwell - timeStep < 0
-            console.log("advancing dwell");
             this.advanceDwell(timeStep);
         }
         else {
-            console.log("moving");
             this.moveVehicle(timeStep, graph);
         }
     }
     findTimeToTravelDistance(s, a) {
-        const v_u = Math.min(0.001, this.velocity); // prevent divide by zero error
+        const v_u = Math.max(0.001, this.velocity); // prevent divide by zero error
         let t = 0;
         const dis = (this.velocity ** 2) + (2 * a * s);
         if (dis < 0) {
@@ -261,10 +262,13 @@ class SimulationService {
         switch (this.state) {
             case "accelerating":
                 a = this.service.vehicle.a_acc;
+                break;
             case "decelerating":
                 a = this.service.vehicle.a_dcc;
+                break;
             default:
                 a = 0;
+                break;
         }
         const v_initial = this.velocity;
         // make sure final velocity is not less that 0 or greater than v_max
@@ -275,7 +279,7 @@ class SimulationService {
     getMovementAuthority(g) {
         return g.shortestPath(this.position, this.nextStop)['len'] - this.distanceAlongEdge;
     }
-    setVehicleState(movementAuthority) {
+    setState(movementAuthority) {
         const breakingDistance = (this.velocity ** 2) / (2 * this.service.vehicle.a_dcc);
         // if the distance to next stop is within the breaking distance
         if (movementAuthority <= breakingDistance) {
@@ -295,9 +299,11 @@ class SimulationService {
         this.position = (_b = (_a = this.currentEdge) === null || _a === void 0 ? void 0 : _a.v) !== null && _b !== void 0 ? _b : "";
         this.distanceAlongEdge = 0;
         this.setEdgeFromPosition(g);
+        console.log("Time:", CUR_TIME.toFixed(0), ": service", this.service.serviceID, "at node", this.position);
     }
     moveVehicle(timeStep, g) {
         var _a, _b;
+        // console.log("Time:", CUR_TIME, ": service", this.service.serviceID, "at edge", this.currentEdge?.edgeID, "distance", this.distanceAlongEdge.toFixed(0), "velocity", this.velocity.toFixed(0));
         // start by making a tracker for the remaining time and then 
         // itterate over, removing chunks of that time
         if (!this.currentEdge) {
@@ -308,7 +314,7 @@ class SimulationService {
             const remainingEdgeLen = (((_a = this.currentEdge) === null || _a === void 0 ? void 0 : _a.len) || 0) - this.distanceAlongEdge;
             const movementAuthority = this.getMovementAuthority(g);
             // determine the state of the service
-            this.setVehicleState(movementAuthority);
+            this.setState(movementAuthority);
             // find the distance travelled by the vehicle
             let { s_travelled, a, v_final } = this.findDistanceTravelledInTime(remainingTime);
             if (s_travelled >= remainingEdgeLen) {
@@ -319,17 +325,19 @@ class SimulationService {
                 // find the speed at the node
                 const { v_final: vAtNode } = this.findDistanceTravelledInTime(timeToNode);
                 v_final = vAtNode;
-                // move to the next edge
-                this.moveToNextEdge(g);
                 // check if it's reached a station
                 if (this.nextStop === ((_b = this.currentEdge) === null || _b === void 0 ? void 0 : _b.v)) {
-                    this.startDwell(remainingTime);
+                    this.startDwell(remainingTime, g);
                     remainingTime = 0; //startDwell will handle the remainingTime
+                }
+                else {
+                    // move to the next edge
+                    this.moveToNextEdge(g);
                 }
             }
             else {
                 // move along the edge
-                this.distanceAlongEdge -= s_travelled;
+                this.distanceAlongEdge += s_travelled;
                 // remove the time remaining
                 remainingTime = 0;
             }
@@ -351,15 +359,12 @@ class TransportMicroSimulator {
     }
     run(timeStep, duration) {
         console.log("running simulation");
+        CUR_TIME = 0;
         for (let i = 0; i < (duration / timeStep); i++) {
-            console.log(`timeStep: ${(i * timeStep).toFixed(1)}s`);
+            //console.log(`timeStep: ${(i*timeStep).toFixed(1)}s`);
             this.step(timeStep);
-            this.logState(i * timeStep);
-            this.simServices.forEach(v => console.log(v.position !== null && v.currentEdge
-                ? `Vehicle ${v.service.serviceID} at ${v.distanceAlongEdge.toFixed(1)}m along edge ${v.currentEdge.edgeID} at speed ${v.velocity.toFixed(2)}`
-                : v.position
-                    ? `Vehicle ${v.service.serviceID} at node ${v.position} at speed ${v.velocity.toFixed(2)} with remaining dwell ${v.remainingDwell.toFixed(1)}`
-                    : `Vehicle ${v.service.serviceID} is in an unknown state`));
+            CUR_TIME += timeStep;
+            this.logState(CUR_TIME);
         }
     }
     logState(timestamp) {
@@ -469,7 +474,7 @@ const r = {
 };
 const sim = new TransportMicroSimulator(loopGraph, [r]);
 saveGraphToDrawIO(sim.graph, `sim-outputs/graph-${Date.now()}`);
-sim.run(1, 20);
+sim.run(0.1, 10000);
 saveSimLogToFile(sim.log, `sim-outputs/simlog-${Date.now()}`);
 //const { route, len } = graph.shortestPath('E', 'A'); // Find shortest path from node "A"
 //console.log(route); // Shortest distances from node A
