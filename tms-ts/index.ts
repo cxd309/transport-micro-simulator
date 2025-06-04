@@ -353,6 +353,77 @@ class SimulationService{
     }
   }
 
+  public findTimeToTravelDistance(s:number, a: number): number{
+    const v_u = Math.min(0.001, this.velocity); // prevent divide by zero error
+    let t = 0;
+
+    const dis = (this.velocity ** 2) + (2 * a * s);
+
+    if(dis< 0){
+      console.warn(
+        `Error in finding time to travel a distance:`,
+        `discriminator is less than 0, the distance cannot be reached`,
+        `v_u: ${v_u}`,
+        `s: ${s}`,
+        `a: ${a}`,
+        `dis: ${dis}`
+      );
+      return t;
+    }
+    
+    t = (-this.velocity + Math.sqrt(dis)) / a;
+    if(!(!isFinite(t) && t> 0)){
+      t = s / v_u;
+    }
+    return t;
+  }
+
+  public findDistanceTravelledInTime(t: number): {s_travelled:number, a: number, v_final: number}{
+    let a: number;
+    switch(this.state){
+      case "accelerating":
+        a = this.service.vehicle.a_acc;
+      case "decelerating":
+        a = this.service.vehicle.a_dcc;
+      default:
+        a = 0;
+    }
+
+    const v_initial = this.velocity;
+    // make sure final velocity is not less that 0 or greater than v_max
+    const v_final = Math.min(Math.max(v_initial+ a*t, 0), this.service.vehicle.v_max);
+
+    const s_travelled = t*((v_initial+v_final)/2);
+
+    return {s_travelled, a, v_final};
+  }
+
+  public getMovementAuthority(g: Graph): number{
+    return g.shortestPath(this.position, this.nextStop)['len'] - this.distanceAlongEdge;
+  }
+
+  public setVehicleState(movementAuthority: number): void{
+    const breakingDistance = (this.velocity ** 2)/(2*this.service.vehicle.a_dcc);
+    // if the distance to next stop is within the breaking distance
+    if(movementAuthority <= breakingDistance){
+      this.state = "decelerating";
+    }
+    // if the velocity is less than v_max
+    else if(this.velocity < this.service.vehicle.v_max){
+      this.state = "accelerating";
+    }
+    // the velocity is equal to v_max
+    else{
+      this.state = "cruising";
+    }
+  }
+
+  public moveToNextEdge(g: Graph): void{
+    this.position = this.currentEdge?.v ?? "";
+    this.distanceAlongEdge = 0;
+    this.findNextEdge(g);
+  }
+
   public moveVehicle(timeStep: number, g: Graph): void{
     // start by making a tracker for the remaining time and then 
     // itterate over, removing chunks of that time
@@ -362,15 +433,34 @@ class SimulationService{
     
     let remainingTime= timeStep;
     while(remainingTime > 0){
-      const remainingEdgeLen = this.currentEdge.len - this.distanceAlongEdge;
-      const {len: distanceToNextStop} = g.shortestPath(this.position, this.nextStop) - this.distanceAlongEdge;
-
-      console.log(distanceToNextStop+1)
+      const remainingEdgeLen = (this.currentEdge?.len || 0) - this.distanceAlongEdge;
+      const movementAuthority = this.getMovementAuthority(g);
 
       // determine the state of the service
+      this.setVehicleState(movementAuthority);
+      
+      // find the distance travelled by the vehicle
+      let {s_travelled, a, v_final} = this.findDistanceTravelledInTime(remainingTime);
 
-      
-      
+      if(s_travelled>=remainingEdgeLen){
+        // find the time taken to travel to the end of the edge
+        const timeToNode = this.findTimeToTravelDistance(remainingEdgeLen, a);
+        // find the speed at the node
+        const {v_final: vAtNode} = this.findDistanceTravelledInTime(timeToNode);
+        v_final = vAtNode;
+        // move to the next edge
+        this.moveToNextEdge(g);
+        // remove the time remaining
+        remainingTime = remainingTime - timeToNode
+        // check if it's reached a station
+        
+      }
+
+      // check if it's reached a station
+      // update the final speed (considering if the time has adjusted)
+      // move along the edge
+      // remove the time remaining
+
     }
   }
 }
@@ -426,28 +516,6 @@ class TransportMicroSimulator{
     }
     this.simServices = newSimServices;
   }
-}
-
-function timeToReachDistance(s: number, v_u: number, a: number): number{
-  const min_speed = 0.001; // to prevent divide-by-zero
-  let time: number = 0;
-
-  if (a !== 0) {
-    const dis = (v_u ** 2 )+ (2 * a * s);
-
-    if (dis < 0) {
-      // Not physically reachable with current parameters
-      return s / Math.max(v_u, min_speed);
-    }
-
-    time = (-v_u + Math.sqrt(dis)) / a;
-
-    // Time must be positive and real
-    if (!(time > 0 && isFinite(time))) {
-      time = s / Math.max(v_u, min_speed);
-    }
-  }
-  return time;
 }
 
 function zeroPad(num: number, size=3): string{
