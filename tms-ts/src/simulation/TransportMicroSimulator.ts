@@ -1,0 +1,48 @@
+import { SimulationService } from "./SimulationService";
+import { Graph } from "../graph/Graph";
+import { GraphData } from "../graph/models";
+import { TransportService } from "./models";
+
+export class TransportMicroSimulator {
+  graph: Graph;
+  simServices: SimulationService[];
+  simTime: number;
+
+  constructor(graphData: GraphData, services: TransportService[]) {
+    console.log("building simulator basis");
+    this.graph = new Graph(graphData);
+    this.simServices = [];
+    this.simTime = 0;
+
+    for (const s of services) {
+      const simService = new SimulationService(s);
+      this.simServices.push(simService);
+    }
+  }
+
+  public run(timeStep: number, duration: number): void {
+    console.log("running simulation");
+    this.simTime = 0;
+    for (let i = 0; i < duration / timeStep; i++) {
+      //console.log(`timeStep: ${(i*timeStep).toFixed(1)}s`);
+      this.step(timeStep);
+      this.simTime += timeStep;
+      this.logState(this.simTime);
+    }
+  }
+
+  public logState(timestamp: number): void {
+    // create a log of the current state
+  }
+
+  public step(timeStep: number): void {
+    const newSimServices: SimulationService[] = [];
+
+    for (const simService of this.simServices) {
+      simService.updatePosition(timeStep, this.graph);
+
+      newSimServices.push(simService);
+    }
+    this.simServices = newSimServices;
+  }
+}
