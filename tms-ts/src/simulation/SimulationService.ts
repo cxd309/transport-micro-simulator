@@ -87,6 +87,9 @@ export class SimulationService {
       this.remainingDwell = 0;
       this.velocity = 0;
       this.state = "accelerating";
+      console.log(
+        `Service ${this.service.serviceID} (${this.service.vehicle.name}) departing from stop ${this.position}`
+      );
     }
   }
 
@@ -216,9 +219,23 @@ export class SimulationService {
         if (this.nextStop === this.currentEdge?.v) {
           this.startDwell(remainingTime, g);
           remainingTime = 0; //startDwell will handle the remainingTime
+          console.log(
+            `Service ${this.service.serviceID} (${
+              this.service.vehicle.name
+            }) at stop ${
+              this.position
+            } to dwell for ${this.remainingDwell.toFixed(0)}s`
+          );
         } else {
           // move to the next edge
           this.moveToNextEdge(g);
+          console.log(
+            `Service ${this.service.serviceID} (${
+              this.service.vehicle.name
+            }) at node ${this.position} with velocity ${this.velocity.toFixed(
+              0
+            )}m/s, next stop ${this.nextStop}`
+          );
         }
       } else {
         // move along the edge

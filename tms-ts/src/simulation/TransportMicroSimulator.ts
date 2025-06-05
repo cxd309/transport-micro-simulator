@@ -27,12 +27,14 @@ export class TransportMicroSimulator {
       //console.log(`timeStep: ${(i*timeStep).toFixed(1)}s`);
       this.step(timeStep);
       this.simTime += timeStep;
-      this.logState(this.simTime);
+      this.logState();
     }
+    console.log("simulation complete");
   }
 
-  public logState(timestamp: number): void {
+  public logState(): void {
     // create a log of the current state
+    // run through each of the services to find if they are at a node
   }
 
   public step(timeStep: number): void {
