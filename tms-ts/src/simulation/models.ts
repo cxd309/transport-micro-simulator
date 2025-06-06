@@ -1,3 +1,5 @@
+import { GraphPosition } from "../graph/models";
+
 export type SimulationState =
   | "stationary"
   | "accelerating"
@@ -21,4 +23,10 @@ export interface VehicleClass {
   a_acc: number; // acceleration rate (m/s/s)
   a_dcc: number; // deceleration rate (m/s/s)
   v_max: number; // maximum speed (m/s)
+}
+
+export interface MARecord {
+  serviceID: string;
+  start: GraphPosition;
+  end: GraphPosition;
 }

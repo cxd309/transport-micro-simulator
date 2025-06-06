@@ -36,7 +36,7 @@ const r: TransportService = {
 };
 
 const sim = new TransportMicroSimulator(loopGraph, [r]);
-sim.run(0.1, 2000);
+sim.run(1, 2000);
 
 //const { route, len } = graph.shortestPath('E', 'A'); // Find shortest path from node "A"
 //console.log(route); // Shortest distances from node A

@@ -39,8 +39,7 @@ export class SimulationService {
   public setEdgeFromPosition(g: Graph): void {
     // use the current position and the route to the next stop to find
     // the next edge on that path
-
-    const { route } = g.shortestPath(this.position, this.nextStop);
+    const { route } = g.getShortestPath(this.position, this.nextStop);
 
     if (route.length < 2) {
       console.warn("current position is equal to next step, no edge to find");
@@ -158,7 +157,7 @@ export class SimulationService {
 
   public getMovementAuthority(g: Graph): number {
     return (
-      g.shortestPath(this.position, this.nextStop)["len"] -
+      g.getShortestPath(this.position, this.nextStop)["len"] -
       this.distanceAlongEdge
     );
   }

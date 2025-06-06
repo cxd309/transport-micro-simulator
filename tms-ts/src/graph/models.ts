@@ -21,3 +21,8 @@ export interface GraphData {
   nodes: GraphNode[];
   edges: GraphEdge[];
 }
+
+export interface GraphPosition {
+  edgeID: string;
+  distanceAlongEdge: number;
+}

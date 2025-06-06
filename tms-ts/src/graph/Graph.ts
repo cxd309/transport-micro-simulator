@@ -86,86 +86,95 @@ export class Graph {
     this.clearPathCache();
     this.addNodeList(graphData.nodes);
     this.addEdgeList(graphData.edges);
-    this.precomputeAllShortestPaths();
+    this.setShortestPathCache();
   }
 
-  public dijkstra(startNodeId: string): {
-    distances: Record<string, number>;
-    previous: Record<string, string | null>;
+  private floydWarshall(): {
+    distances: Record<string, Record<string, number>>;
+    next: Record<string, Record<string, string | null>>;
   } {
-    const distances: Record<string, number> = {};
-    const previous: Record<string, string | null> = {};
-    const visited: Set<string> = new Set();
+    const nodeIDList = this.nodes.map((n) => n.nodeID);
+    const distances: Record<string, Record<string, number>> = {};
+    const next: Record<string, Record<string, string | null>> = {};
 
-    // Initialise all distances to inifinty, exect start node
-    for (const n of this.nodes) {
-      distances[n.nodeID] = Infinity;
-      previous[n.nodeID] = null;
-    }
-    distances[startNodeId] = 0;
-
-    while (visited.size < this.nodes.length) {
-      //find the unvisited node with the smallest distance
-      let currentNodeId: string | null = null;
-      let minDistance = Infinity;
-
-      for (const n of this.nodes) {
-        if (!visited.has(n.nodeID) && distances[n.nodeID] < minDistance) {
-          minDistance = distances[n.nodeID];
-          currentNodeId = n.nodeID;
-        }
+    // initialise distances and next
+    for (const i of nodeIDList) {
+      distances[i] = {};
+      next[i] = {};
+      for (const j of nodeIDList) {
+        distances[i][j] = i === j ? 0 : Infinity;
+        next[i][j] = null;
       }
+    }
 
-      if (currentNodeId === null) break;
+    // set the edge weights
+    for (const e of this.edges) {
+      distances[e.u][e.v] = e.len;
+      next[e.u][e.v] = e.v;
+    }
 
-      visited.add(currentNodeId);
-
-      // outgoing edges from current node
-      for (const e of this.edges) {
-        if (e.u === currentNodeId) {
-          const vId = e.v;
-
-          if (!visited.has(vId)) {
-            const newDist = distances[currentNodeId] + e.len;
-
-            if (newDist < distances[vId]) {
-              distances[vId] = newDist;
-              previous[vId] = currentNodeId;
-            }
+    // Floyd-Warshall
+    for (const k of nodeIDList) {
+      for (const i of nodeIDList) {
+        for (const j of nodeIDList) {
+          if (distances[i][k] + distances[k][j] < distances[i][j]) {
+            distances[i][j] = distances[i][k] + distances[k][j];
+            next[i][j] = next[i][k];
           }
         }
       }
     }
 
-    return { distances, previous };
+    return { distances, next };
   }
 
-  public shortestPath(
+  private reconstructPath(
+    u: string,
+    v: string,
+    next: Record<string, Record<string, string | null>>
+  ): string[] {
+    if (next[u][v] === null) return [];
+    const path = [];
+    while (u !== v) {
+      u = next[u][v]!;
+      path.push(u);
+    }
+    return path;
+  }
+
+  private setShortestPathCache(): void {
+    // use the Floyd-Warshall algorithm
+    const nodeIDList = this.nodes.map((n) => n.nodeID);
+    const { distances, next } = this.floydWarshall();
+    this.shortestPathCache = new Map();
+    for (const i of nodeIDList) {
+      for (const j of nodeIDList) {
+        if (i !== j && distances[i][j] !== Infinity) {
+          const path = this.reconstructPath(i, j, next);
+          this.shortestPathCache.set(this.getPathKey(i, j), {
+            route: path,
+            len: distances[i][j],
+          });
+        }
+      }
+    }
+  }
+
+  public getShortestPath(
     start: string,
     end: string
   ): { route: string[]; len: number } {
     const key = this.getPathKey(start, end);
     const cached = this.shortestPathCache.get(key);
-    if (cached) return cached;
-    console.log(`${key} is not a cached path`);
-
-    const { distances, previous } = this.dijkstra(start);
-
-    const route: string[] = [];
-    let current = end;
-    while (current !== null && current !== start) {
-      route.unshift(current);
-      current = previous[current]!;
+    if (cached) {
+      return cached;
+    } else {
+      console.warn(
+        key,
+        "is not a cached path, this means it is probably not a valid path or shortestPathCache need to be rebuilt"
+      );
+      return { route: [], len: Infinity };
     }
-
-    if (current === start) {
-      route.unshift(start);
-      const result = { route, len: distances[end] };
-      this.shortestPathCache.set(key, result);
-      return result;
-    }
-
-    return { route: [], len: Infinity };
   }
 
   public toJSON(): GraphData {
@@ -177,33 +186,5 @@ export class Graph {
 
   public clearPathCache(): void {
     this.shortestPathCache.clear();
-  }
-
-  public precomputeAllShortestPaths(): void {
-    console.log("Precomputing all shortest paths...");
-    for (const startNode of this.nodes) {
-      const { distances, previous } = this.dijkstra(startNode.nodeID);
-      for (const endNode of this.nodes) {
-        const startId = startNode.nodeID;
-        const endId = endNode.nodeID;
-        if (startId === endId) continue;
-
-        const key = this.getPathKey(startId, endId);
-        if (this.shortestPathCache.has(key)) continue;
-
-        const route: string[] = [];
-        let current = endId;
-        while (current !== null && current !== startId) {
-          route.unshift(current);
-          current = previous[current]!;
-        }
-
-        if (current === startId) {
-          route.unshift(startId);
-          this.shortestPathCache.set(key, { route, len: distances[endId] });
-        }
-      }
-    }
-    console.log(`Precomputed ${this.shortestPathCache.size} shortest paths.`);
   }
 }
