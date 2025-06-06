@@ -17,7 +17,7 @@ export class TransportMicroSimulator {
     this.simTime = 0;
 
     for (const s of services) {
-      const simService = new SimulationService(s);
+      const simService = new SimulationService(s, this.graph);
       this.simServices.push(simService);
     }
   }
@@ -36,6 +36,22 @@ export class TransportMicroSimulator {
   public logState(): void {
     // create a log of the current state
     // run through each of the services to find if they are at a node
+    for (const simService of this.simServices) {
+      console.log(
+        "time",
+        this.simTime.toFixed(1),
+        "service",
+        simService.service.serviceID,
+        "at edge",
+        simService.currentPosition.edge.edgeID,
+        "distance",
+        simService.currentPosition.distanceAlongEdge.toFixed(0),
+        "velocity",
+        simService.velocity.toFixed(0),
+        "state",
+        simService.state
+      );
+    }
   }
 
   private makeMARecord(): void {

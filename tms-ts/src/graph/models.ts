@@ -23,6 +23,6 @@ export interface GraphData {
 }
 
 export interface GraphPosition {
-  edgeID: string;
+  edge: GraphEdge;
   distanceAlongEdge: number;
 }

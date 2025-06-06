@@ -1,4 +1,6 @@
-import { GraphNode, GraphEdge, GraphData } from "./models";
+import { RouteStop } from "../simulation/models";
+import { findNextStop } from "../utils/helpers";
+import { GraphNode, GraphEdge, GraphData, GraphPosition } from "./models";
 
 export class Graph {
   edges: GraphEdge[];
@@ -186,5 +188,55 @@ export class Graph {
 
   public clearPathCache(): void {
     this.shortestPathCache.clear();
+  }
+
+  public getNextEdge(u: string, v: string): GraphEdge | undefined {
+    const { route } = this.getShortestPath(u, v);
+
+    if (route.length < 2) {
+      console.warn("getNextEdge: u is equal to v, no edge to find");
+      return;
+    }
+    return this.getEdge(route[0], route[1]);
+  }
+
+  public getDistanceToNode(currentPosition: GraphPosition, targetNode: string) {
+    const { len } = this.getShortestPath(currentPosition.edge.u, targetNode);
+
+    return len - currentPosition.distanceAlongEdge;
+  }
+
+  public getForwardPosition(
+    currentPosition: GraphPosition,
+    stops: RouteStop[],
+    nextStop: string,
+    s_total: number
+  ): GraphPosition {
+    let s_remaining = s_total;
+    while (s_remaining > 0) {
+      const edgeDistanceRemaining =
+        currentPosition.edge.len - currentPosition.distanceAlongEdge;
+      if (s_remaining > edgeDistanceRemaining) {
+        //find the next edge to move onto
+        if (currentPosition.edge.v === nextStop) {
+          nextStop = findNextStop(currentPosition.edge.v, stops).nodeID;
+        }
+        const nextEdge = this.getNextEdge(currentPosition.edge.v, nextStop);
+        if (!nextEdge) {
+          console.warn("Cannot find next edge");
+          break;
+        } else {
+          currentPosition = {
+            distanceAlongEdge: 0,
+            edge: nextEdge,
+          };
+          s_remaining -= edgeDistanceRemaining;
+        }
+      } else {
+        currentPosition.distanceAlongEdge += s_remaining;
+        s_remaining = 0;
+      }
+    }
+    return currentPosition;
   }
 }

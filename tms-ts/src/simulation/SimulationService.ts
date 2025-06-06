@@ -1,22 +1,21 @@
 import { TransportService, SimulationState } from "./models";
-import { GraphEdge } from "../graph/models";
+import { GraphEdge, GraphPosition } from "../graph/models";
 import { Graph } from "../graph/Graph";
+import { findNextStop, findStopIndex } from "../utils/helpers";
 
 export class SimulationService {
   service: TransportService;
-  position: string; //nodeID for current position
-  nextStop: string; //nodeID for the next stop
-  velocity: number;
-  state: SimulationState;
-  s_acc: number;
-  s_dcc: number;
-  remainingDwell: number;
-  currentEdge?: GraphEdge;
-  distanceAlongEdge: number;
 
-  constructor(service: TransportService) {
+  currentPosition: GraphPosition;
+  nextStop: string; //nodeID for the next stop
+
+  state: SimulationState;
+  velocity: number;
+  remainingDwell: number;
+
+  constructor(service: TransportService, g: Graph) {
     this.service = service;
-    this.position = service.startNodeID;
+
     if (service.startNodeID === service.stops[0].nodeID) {
       this.nextStop = service.stops[1].nodeID;
     } else {
@@ -26,37 +25,30 @@ export class SimulationService {
     this.velocity = 0;
     this.state = "stationary";
 
-    this.s_acc =
-      this.service.vehicle.v_max ** 2 / (2 * this.service.vehicle.a_acc);
-    this.s_dcc =
-      this.service.vehicle.v_max ** 2 / (2 * this.service.vehicle.a_dcc);
-
     this.remainingDwell = 0;
-    this.distanceAlongEdge = 0;
-    this.currentEdge = undefined;
-  }
 
-  public setEdgeFromPosition(g: Graph): void {
-    // use the current position and the route to the next stop to find
-    // the next edge on that path
-    const { route } = g.getShortestPath(this.position, this.nextStop);
+    // find the next node
+    const route: string[] = g.getShortestPath(
+      service.startNodeID,
+      this.nextStop
+    ).route;
 
-    if (route.length < 2) {
-      console.warn("current position is equal to next step, no edge to find");
-    } else {
-      const nextEdge = g.getEdge(route[0], route[1]);
-      if (!nextEdge) {
-        console.warn(
-          `Cannot find next edge, there is no edge from ${g.getEdgeKey(
-            route[0],
-            route[1]
-          )}`
-        );
-      } else {
-        this.currentEdge = nextEdge;
-        this.distanceAlongEdge = 0;
-      }
+    // find the edge
+    let e: GraphEdge | undefined = g.getEdge(route[0], route[1]);
+
+    if (!e) {
+      new TypeError("Invalid Route");
+      e = {
+        edgeID: "",
+        len: 0,
+        u: "",
+        v: "",
+      };
     }
+    this.currentPosition = {
+      distanceAlongEdge: 0,
+      edge: e,
+    };
   }
 
   public startDwell(remainingTime: number, g: Graph): void {
@@ -65,19 +57,17 @@ export class SimulationService {
     this.state = "stationary";
 
     // find the index of the current position
-    const curStopIndex =
-      this.service.stops.findIndex(
-        (stop) => stop.nodeID === this.currentEdge?.v
-      ) ?? 0;
-    const nextStopIndex = (curStopIndex + 1) % this.service.stops.length;
-
-    // set the dwell time
-    this.remainingDwell =
-      this.service.stops[curStopIndex].t_dwell - remainingTime;
-    // set the next stop
-    this.nextStop = this.service.stops[nextStopIndex].nodeID;
+    const currentStopID = this.currentPosition.edge.v;
+    const nStop = findNextStop(currentStopID, this.service.stops);
+    this.nextStop = nStop.nodeID;
+    this.remainingDwell = nStop.t_dwell - remainingTime;
     // move to the next edge
-    this.moveToNextEdge(g);
+    const nextEdge = g.getNextEdge(currentStopID, this.nextStop);
+    if (!nextEdge) {
+      console.warn("Cannot find next edge at dwell");
+    } else {
+      this.currentPosition = { edge: nextEdge, distanceAlongEdge: 0 };
+    }
   }
 
   public advanceDwell(timeStep: number): void {
@@ -87,7 +77,7 @@ export class SimulationService {
       this.velocity = 0;
       this.state = "accelerating";
       console.log(
-        `Service ${this.service.serviceID} (${this.service.vehicle.name}) departing from stop ${this.position}`
+        `Service ${this.service.serviceID} (${this.service.vehicle.name}) departing from stop ${this.currentPosition.edge.u}`
       );
     }
   }
@@ -108,15 +98,7 @@ export class SimulationService {
     const dis = this.velocity ** 2 + 2 * a * s;
 
     if (dis < 0) {
-      console.warn(
-        `Error in finding time to travel a distance:`,
-        `discriminator is less than 0, the distance cannot be reached`,
-        `v_u: ${v_u}`,
-        `s: ${s}`,
-        `a: ${a}`,
-        `dis: ${dis}`
-      );
-      return t;
+      return s / v_u;
     }
 
     t = (-this.velocity + Math.sqrt(dis)) / a;
@@ -137,7 +119,7 @@ export class SimulationService {
         a = this.service.vehicle.a_acc;
         break;
       case "decelerating":
-        a = this.service.vehicle.a_dcc;
+        a = -this.service.vehicle.a_dcc;
         break;
       default:
         a = 0;
@@ -156,15 +138,18 @@ export class SimulationService {
   }
 
   public getMovementAuthority(g: Graph): number {
+    const s_edge = this.currentPosition.distanceAlongEdge;
+
     return (
-      g.getShortestPath(this.position, this.nextStop)["len"] -
-      this.distanceAlongEdge
+      g.getShortestPath(this.currentPosition.edge.u, this.nextStop)["len"] -
+      s_edge
     );
   }
 
-  public setState(movementAuthority: number): void {
+  public setState(movementAuthority: number, timeStep: number): void {
     const breakingDistance =
-      this.velocity ** 2 / (2 * this.service.vehicle.a_dcc);
+      this.velocity ** 2 / (2 * this.service.vehicle.a_dcc) +
+      this.velocity * timeStep;
     // if the distance to next stop is within the breaking distance
     if (movementAuthority <= breakingDistance) {
       this.state = "decelerating";
@@ -179,71 +164,34 @@ export class SimulationService {
     }
   }
 
-  public moveToNextEdge(g: Graph): void {
-    this.position = this.currentEdge?.v ?? "";
-    this.distanceAlongEdge = 0;
-    this.setEdgeFromPosition(g);
-    //console.log("Time:", CUR_TIME.toFixed(0), ": service", this.service.serviceID, "at node", this.position);
-  }
-
   public moveVehicle(timeStep: number, g: Graph): void {
-    // console.log("Time:", CUR_TIME, ": service", this.service.serviceID, "at edge", this.currentEdge?.edgeID, "distance", this.distanceAlongEdge.toFixed(0), "velocity", this.velocity.toFixed(0));
-    // start by making a tracker for the remaining time and then
-    // itterate over, removing chunks of that time
-    if (!this.currentEdge) {
-      this.setEdgeFromPosition(g);
-    }
+    const buffer = 10 * timeStep; //buffer in meters
+    const movementAuthority = this.getMovementAuthority(g);
 
-    let remainingTime = timeStep;
-    while (remainingTime > 0) {
-      const remainingEdgeLen =
-        (this.currentEdge?.len || 0) - this.distanceAlongEdge;
-      const movementAuthority = this.getMovementAuthority(g);
-      // determine the state of the service
-      this.setState(movementAuthority);
-      // find the distance travelled by the vehicle
-      let { s_travelled, a, v_final } =
-        this.findDistanceTravelledInTime(remainingTime);
-      if (s_travelled >= remainingEdgeLen) {
-        // find the time taken to travel to the end of the edge
-        const timeToNode = this.findTimeToTravelDistance(remainingEdgeLen, a);
-        // remove from remainingTime
-        remainingTime = remainingTime - timeToNode;
-        // find the speed at the node
-        const { v_final: vAtNode } =
-          this.findDistanceTravelledInTime(timeToNode);
-        v_final = vAtNode;
+    // determine the state of the service
+    this.setState(movementAuthority, timeStep);
 
-        // check if it's reached a station
-        if (this.nextStop === this.currentEdge?.v) {
-          this.startDwell(remainingTime, g);
-          remainingTime = 0; //startDwell will handle the remainingTime
-          console.log(
-            `Service ${this.service.serviceID} (${
-              this.service.vehicle.name
-            }) at stop ${
-              this.position
-            } to dwell for ${this.remainingDwell.toFixed(0)}s`
-          );
-        } else {
-          // move to the next edge
-          this.moveToNextEdge(g);
-          console.log(
-            `Service ${this.service.serviceID} (${
-              this.service.vehicle.name
-            }) at node ${this.position} with velocity ${this.velocity.toFixed(
-              0
-            )}m/s, next stop ${this.nextStop}`
-          );
-        }
-      } else {
-        // move along the edge
-        this.distanceAlongEdge += s_travelled;
-        // remove the time remaining
-        remainingTime = 0;
-      }
-      // update the final speed (considering if the time has adjusted)
-      this.velocity = v_final;
+    // find the distance travelled by the vehicle
+    const { s_travelled, a, v_final } =
+      this.findDistanceTravelledInTime(timeStep);
+
+    // update the final speed (considering if the time has adjusted)
+    this.velocity = v_final;
+
+    // find the distance to reach the next stop
+    const s_nextStop = g.getDistanceToNode(this.currentPosition, this.nextStop);
+    if (s_nextStop <= s_travelled || s_nextStop <= buffer) {
+      // find the time to travel to the station
+      const timeToStop = this.findTimeToTravelDistance(s_nextStop, a);
+      this.startDwell(timeStep - timeToStop, g);
+    } else {
+      // find the position travelled to
+      this.currentPosition = g.getForwardPosition(
+        this.currentPosition,
+        this.service.stops,
+        this.nextStop,
+        s_travelled
+      );
     }
   }
 }

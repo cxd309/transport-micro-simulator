@@ -1,6 +1,7 @@
 import { GraphData } from "../graph/models";
 import { Graph } from "../graph/Graph";
 import fs from "fs";
+import { RouteStop } from "../simulation/models";
 
 function zeroPad(num: number, size = 3): string {
   return num.toString().padStart(size, "0");
@@ -82,4 +83,17 @@ export function saveGraphToDrawIO(graph: Graph, filePath: string): void {
 
   fs.writeFileSync(filePath, outputList.join("\n"), "utf-8");
   console.log(`Graph saved to ${filePath}`);
+}
+
+export function findStopIndex(nodeID: string, stops: RouteStop[]): number {
+  return stops.findIndex((stop) => stop.nodeID === nodeID) ?? 0;
+}
+
+export function findNextStop(
+  currentNodeID: string,
+  stops: RouteStop[]
+): RouteStop {
+  const curStopIndex = findStopIndex(currentNodeID, stops);
+  const nextStopIndex = (curStopIndex + 1) % stops.length;
+  return stops[nextStopIndex];
 }
