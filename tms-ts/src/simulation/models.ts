@@ -37,3 +37,5 @@ export interface MARecord {
   serviceID: string;
   segments: SegmentSection[];
 }
+
+export type StopManager = Record<string, boolean>;

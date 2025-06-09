@@ -1,7 +1,7 @@
 import { SimulationService } from "./SimulationService";
 import { Graph } from "../graph/Graph";
 import { GraphData, GraphPosition } from "../graph/models";
-import { MAMap, MARecord, TransportService } from "./models";
+import { MAMap, MARecord, StopManager, TransportService } from "./models";
 import { truncateMA } from "../utils/helpers";
 
 export class TransportMicroSimulator {
@@ -9,6 +9,7 @@ export class TransportMicroSimulator {
   simServices: SimulationService[];
   simTime: number;
   maRecord: MAMap;
+  stopManager: StopManager;
 
   constructor(graphData: GraphData, services: TransportService[]) {
     console.log("building simulator basis");
@@ -16,6 +17,7 @@ export class TransportMicroSimulator {
     this.simServices = [];
     this.simTime = 0;
     this.maRecord = new Map();
+    this.stopManager = {};
 
     for (const s of services) {
       const simService = new SimulationService(s, this.graph);
@@ -24,6 +26,10 @@ export class TransportMicroSimulator {
         serviceID: simService.service.serviceID,
         segments: [],
       });
+    }
+
+    for (const n of this.graph.nodes) {
+      this.stopManager[n.nodeID] = false;
     }
   }
 
@@ -60,6 +66,7 @@ export class TransportMicroSimulator {
   }
 
   public step(timeStep: number): void {
+    const buffer = 5;
     this.simTime += timeStep;
     const newSimServices: SimulationService[] = [];
 
@@ -74,7 +81,8 @@ export class TransportMicroSimulator {
       const grantedMASegments = truncateMA(
         proposedMASegments,
         this.maRecord,
-        id
+        id,
+        buffer
       );
 
       this.maRecord.set(id, {
@@ -82,7 +90,14 @@ export class TransportMicroSimulator {
         segments: grantedMASegments,
       });
 
-      simService.updatePosition(timeStep, this.graph, grantedMASegments);
+      const { stopManager: newSM } = simService.updatePosition(
+        timeStep,
+        this.graph,
+        grantedMASegments,
+        this.stopManager
+      );
+
+      this.stopManager = newSM;
 
       newSimServices.push(simService);
     }

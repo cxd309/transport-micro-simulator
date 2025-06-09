@@ -251,8 +251,7 @@ export class Graph {
         start: segmentStart,
         end: segmentEnd,
       });
-
-      if (s_remaining > edgeDistanceRemaining) {
+      if (s_remaining >= edgeDistanceRemaining) {
         //find the next edge to move onto
         if (currentPosition.edge.v === nextStop) {
           nextStop = findNextStop(currentPosition.edge.v, stops).nodeID;
@@ -267,6 +266,13 @@ export class Graph {
             edge: nextEdge,
           };
           s_remaining -= edgeDistanceRemaining;
+          if (s_remaining === 0) {
+            segments.push({
+              edge: currentPosition.edge,
+              start: 0,
+              end: 0,
+            });
+          }
         }
       } else {
         currentPosition.distanceAlongEdge += s_remaining;

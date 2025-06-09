@@ -46,7 +46,7 @@ const testGraph: GraphData = {
       edgeID: "C->D",
       u: "C",
       v: "D",
-      len: 200,
+      len: 50,
     },
     {
       edgeID: "D->A",
@@ -78,11 +78,11 @@ const r1: TransportService = {
   stops: [
     {
       nodeID: "A",
-      t_dwell: 5,
+      t_dwell: 10,
     },
     {
       nodeID: "D",
-      t_dwell: 5,
+      t_dwell: 10,
     },
   ],
   serviceID: "SVC.001",
@@ -94,11 +94,11 @@ const r2: TransportService = {
   stops: [
     {
       nodeID: "B",
-      t_dwell: 5,
+      t_dwell: 10,
     },
     {
       nodeID: "D",
-      t_dwell: 5,
+      t_dwell: 10,
     },
   ],
   serviceID: "SVC.002",
@@ -106,8 +106,8 @@ const r2: TransportService = {
   vehicle: veh,
 };
 
-const sim = new TransportMicroSimulator(testGraph, [r1]);
-sim.run(1, 50);
+const sim = new TransportMicroSimulator(testGraph, [r1, r2]);
+sim.run(1, 35);
 
 //const { route, len } = graph.shortestPath('E', 'A'); // Find shortest path from node "A"
 //console.log(route); // Shortest distances from node A

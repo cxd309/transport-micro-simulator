@@ -131,7 +131,8 @@ export function hasConflict(
 export function truncateMA(
   proposed: SegmentSection[],
   existing: MAMap,
-  selfID: string
+  selfID: string,
+  buffer: number
 ): SegmentSection[] {
   let earliestConflictDistance = Infinity;
 

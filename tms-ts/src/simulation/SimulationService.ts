@@ -1,4 +1,9 @@
-import { TransportService, SimulationState, SegmentSection } from "./models";
+import {
+  TransportService,
+  SimulationState,
+  SegmentSection,
+  StopManager,
+} from "./models";
 import { GraphEdge, GraphPosition } from "../graph/models";
 import { Graph } from "../graph/Graph";
 import {
@@ -17,6 +22,8 @@ export class SimulationService {
   velocity: number;
   remainingDwell: number;
 
+  stopManager: StopManager;
+
   constructor(service: TransportService, g: Graph) {
     this.service = service;
 
@@ -30,6 +37,7 @@ export class SimulationService {
     this.state = "stationary";
 
     this.remainingDwell = 0;
+    this.stopManager = {};
 
     // find the next node
     const route: string[] = g.getShortestPath(
@@ -57,6 +65,7 @@ export class SimulationService {
 
   public startDwell(remainingTime: number, g: Graph): void {
     // set the vehicle to stationary
+    this.stopManager[this.nextStop] = true;
     this.velocity = 0;
     this.state = "stationary";
 
@@ -77,6 +86,7 @@ export class SimulationService {
   public advanceDwell(timeStep: number): void {
     this.remainingDwell -= timeStep;
     if (this.remainingDwell <= 0) {
+      this.stopManager[this.nextStop] = false;
       this.remainingDwell = 0;
       this.velocity = 0;
       this.state = "accelerating";
@@ -89,14 +99,17 @@ export class SimulationService {
   public updatePosition(
     timeStep: number,
     graph: Graph,
-    maSegments: SegmentSection[]
-  ): void {
+    maSegments: SegmentSection[],
+    stopManager: StopManager
+  ): { stopManager: StopManager } {
+    this.stopManager = stopManager;
     if (this.remainingDwell > 0) {
       // check if remainingdwell - timeStep < 0
       this.advanceDwell(timeStep);
     } else {
       this.moveVehicle(timeStep, graph, maSegments);
     }
+    return { stopManager: this.stopManager };
   }
 
   public findTimeToTravelDistance(s: number, a: number): number {
@@ -199,7 +212,12 @@ export class SimulationService {
     if (s_nextStop <= s_travelled) {
       // find the time to travel to the station
       const t_stop = this.findTimeToTravelDistance(s_nextStop, a);
-      this.startDwell(timeStep - t_stop, g);
+      if (this.stopManager[this.nextStop]) {
+        this.velocity = 0;
+        this.state = "stationary";
+      } else {
+        this.startDwell(timeStep - t_stop, g);
+      }
     } else {
       // find the position travelled to
       this.currentPosition = g.getForwardPosition(
