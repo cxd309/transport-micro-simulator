@@ -230,11 +230,12 @@ export class Graph {
   }
 
   public getSegmentsAlongPath(
-    currentPosition: GraphPosition,
+    startPosition: GraphPosition,
     stops: RouteStop[],
     nextStop: string,
     s_total: number
   ): SegmentSection[] {
+    let currentPosition = { ...startPosition };
     const segments: SegmentSection[] = [];
     let s_remaining = s_total;
     while (s_remaining > 0) {

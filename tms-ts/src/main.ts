@@ -3,7 +3,7 @@ import { VehicleClass, TransportService } from "./simulation/models";
 import { TransportMicroSimulator } from "./simulation/TransportMicroSimulator";
 import { Graph } from "./graph/Graph";
 
-const loopGraph = createBasicLoopGraph(4, 50, 100);
+const loopGraph = createBasicLoopGraph(4, 100, 20);
 const g = new Graph(loopGraph);
 
 saveGraphToDrawIO(g, "sim-outputs/drawio-graph.txt");
@@ -11,7 +11,7 @@ saveGraphToDrawIO(g, "sim-outputs/drawio-graph.txt");
 const veh: VehicleClass = {
   a_acc: 1,
   a_dcc: 1,
-  v_max: 80,
+  v_max: 10,
   name: "bus",
 };
 
@@ -32,7 +32,7 @@ const r: TransportService = {
 };
 
 const sim = new TransportMicroSimulator(loopGraph, [r]);
-sim.run(1, 20);
+sim.run(1, 100);
 
 //const { route, len } = graph.shortestPath('E', 'A'); // Find shortest path from node "A"
 //console.log(route); // Shortest distances from node A

@@ -1,7 +1,11 @@
 import { TransportService, SimulationState, SegmentSection } from "./models";
 import { GraphEdge, GraphPosition } from "../graph/models";
 import { Graph } from "../graph/Graph";
-import { findNextStop, findStopIndex } from "../utils/helpers";
+import {
+  findNextStop,
+  findStopIndex,
+  projectDistanceTravelled,
+} from "../utils/helpers";
 
 export class SimulationService {
   service: TransportService;
@@ -146,23 +150,34 @@ export class SimulationService {
   }
 
   public setState(maSegments: SegmentSection[], timeStep: number): void {
+    const buffer = 0.5;
     const s_ma = maSegments.reduce(
       (acc, seg) => acc + (seg.end - seg.start),
       0
     );
 
-    const breakingDistance = this.getBrakingDistance();
-    // if the distance to next stop is within the breaking distance
-    if (s_ma <= breakingDistance) {
-      this.state = "decelerating";
-    }
-    // if the velocity is less than v_max
-    else if (this.velocity < this.service.vehicle.v_max) {
+    // find the braking distance if it accelerated over the next timestep
+    const s_nextStepMax = projectDistanceTravelled(
+      this.velocity,
+      this.service.vehicle.a_acc,
+      this.service.vehicle.a_dcc,
+      timeStep
+    );
+    // find the braking distance if it cruised over the next timestep
+    const s_nextStepCruise = projectDistanceTravelled(
+      this.velocity,
+      0,
+      this.service.vehicle.a_dcc,
+      timeStep
+    );
+
+    // is it authorised to accelerate
+    if (s_nextStepMax <= s_ma && this.velocity < this.service.vehicle.v_max) {
       this.state = "accelerating";
-    }
-    // the velocity is equal to v_max
-    else {
+    } else if (s_nextStepCruise <= s_ma) {
       this.state = "cruising";
+    } else {
+      this.state = "decelerating";
     }
   }
 
@@ -171,8 +186,6 @@ export class SimulationService {
     g: Graph,
     maSegments: SegmentSection[]
   ): void {
-    const buffer = 10 * timeStep; //buffer in meters
-
     // determine the state of the service
     this.setState(maSegments, timeStep);
 
@@ -181,8 +194,7 @@ export class SimulationService {
       this.findDistanceTravelledInTime(timeStep);
     // find the distance to reach the next stop
     const s_nextStop = g.getDistanceToNode(this.currentPosition, this.nextStop);
-
-    if (s_nextStop <= s_travelled || s_nextStop <= buffer) {
+    if (s_nextStop <= s_travelled) {
       // find the time to travel to the station
       const t_stop = this.findTimeToTravelDistance(s_nextStop, a);
       this.startDwell(timeStep - t_stop, g);
@@ -199,27 +211,29 @@ export class SimulationService {
   }
 
   public calculateProposedMA(graph: Graph, timeStep: number): SegmentSection[] {
-    // find the distance to stop from the current velocity
-    const s_braking = this.getBrakingDistance();
-    // find the distance to the next stop
+    // find the highest possible velcity after the next timestep
+    const v_nextStep = Math.min(
+      this.velocity + this.service.vehicle.a_acc * timeStep * 2,
+      this.service.vehicle.v_max
+    );
+    // find the maximum possible distance travelled in the next timestep
+    const s_nextStep = timeStep * 2 * ((v_nextStep + this.velocity) / 2);
+    // find the braking distance from the new velocity
+    const s_nextBrake = v_nextStep ** 2 / (2 * this.service.vehicle.a_dcc);
+    const s_projected = s_nextStep + s_nextBrake;
+    // find the distance to the next service stop
     const s_nextStop = graph.getDistanceToNode(
       this.currentPosition,
       this.nextStop
     );
-    // find the maximum velocity the vehicle could reach in the next timestep
-    const v_max = Math.min(
-      this.service.vehicle.v_max,
-      this.velocity + this.service.vehicle.a_acc * timeStep
-    );
-    // find the distance the vehicle could travel in the next timestep with acceleration
-    const s_potential = (timeStep * (v_max + this.velocity)) / 2;
 
-    const s_proposed = Math.min(s_nextStop, Math.max(s_braking, s_potential));
+    const s_ma = Math.min(s_nextStop, s_projected);
+
     const maSegments = graph.getSegmentsAlongPath(
       this.currentPosition,
       this.service.stops,
       this.nextStop,
-      s_proposed
+      s_ma
     );
 
     return maSegments;

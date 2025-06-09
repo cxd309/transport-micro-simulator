@@ -186,3 +186,15 @@ export function truncateMA(
   }
   return truncated;
 }
+
+export function projectDistanceTravelled(
+  v_current: number,
+  a_acc: number,
+  a_dcc: number,
+  timeStep: number
+): number {
+  const v_final = v_current + a_acc * timeStep;
+  const s_step = timeStep * ((v_current + v_final) / 2);
+  const s_brake = v_final ** 2 / (2 * a_dcc);
+  return s_step + s_brake;
+}
