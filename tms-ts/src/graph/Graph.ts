@@ -222,7 +222,7 @@ export class Graph {
     if (segments.length === 0) {
       return currentPosition;
     }
-    const lastSegment = segments[-1];
+    const lastSegment = segments[segments.length - 1];
     return {
       edge: lastSegment.edge,
       distanceAlongEdge: lastSegment.end,

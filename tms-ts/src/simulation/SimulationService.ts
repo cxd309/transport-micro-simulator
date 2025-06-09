@@ -91,7 +91,7 @@ export class SimulationService {
       // check if remainingdwell - timeStep < 0
       this.advanceDwell(timeStep);
     } else {
-      this.moveVehicle(timeStep, graph);
+      this.moveVehicle(timeStep, graph, maSegments);
     }
   }
 
@@ -145,20 +145,15 @@ export class SimulationService {
     return this.velocity ** 2 / (2 * this.service.vehicle.a_dcc);
   }
 
-  public getMovementAuthority(g: Graph): number {
-    const s_edge = this.currentPosition.distanceAlongEdge;
-
-    return (
-      g.getShortestPath(this.currentPosition.edge.u, this.nextStop)["len"] -
-      s_edge
+  public setState(maSegments: SegmentSection[], timeStep: number): void {
+    const s_ma = maSegments.reduce(
+      (acc, seg) => acc + (seg.end - seg.start),
+      0
     );
-  }
 
-  public setState(movementAuthority: number, timeStep: number): void {
-    const breakingDistance =
-      this.getBrakingDistance() + this.velocity * timeStep;
+    const breakingDistance = this.getBrakingDistance();
     // if the distance to next stop is within the breaking distance
-    if (movementAuthority <= breakingDistance) {
+    if (s_ma <= breakingDistance) {
       this.state = "decelerating";
     }
     // if the velocity is less than v_max
@@ -171,12 +166,15 @@ export class SimulationService {
     }
   }
 
-  public moveVehicle(timeStep: number, g: Graph): void {
+  public moveVehicle(
+    timeStep: number,
+    g: Graph,
+    maSegments: SegmentSection[]
+  ): void {
     const buffer = 10 * timeStep; //buffer in meters
-    const movementAuthority = this.getMovementAuthority(g);
 
     // determine the state of the service
-    this.setState(movementAuthority, timeStep);
+    this.setState(maSegments, timeStep);
 
     // find the distance travelled by the vehicle
     const { s_travelled, a, v_final } =
@@ -203,6 +201,11 @@ export class SimulationService {
   public calculateProposedMA(graph: Graph, timeStep: number): SegmentSection[] {
     // find the distance to stop from the current velocity
     const s_braking = this.getBrakingDistance();
+    // find the distance to the next stop
+    const s_nextStop = graph.getDistanceToNode(
+      this.currentPosition,
+      this.nextStop
+    );
     // find the maximum velocity the vehicle could reach in the next timestep
     const v_max = Math.min(
       this.service.vehicle.v_max,
@@ -210,7 +213,8 @@ export class SimulationService {
     );
     // find the distance the vehicle could travel in the next timestep with acceleration
     const s_potential = (timeStep * (v_max + this.velocity)) / 2;
-    const s_proposed = Math.max(s_braking, s_potential);
+
+    const s_proposed = Math.min(s_nextStop, Math.max(s_braking, s_potential));
     const maSegments = graph.getSegmentsAlongPath(
       this.currentPosition,
       this.service.stops,
