@@ -1,4 +1,4 @@
-import { RouteStop } from "../simulation/models";
+import { RouteStop, SegmentSection } from "../simulation/models";
 import { findNextStop } from "../utils/helpers";
 import { GraphNode, GraphEdge, GraphData, GraphPosition } from "./models";
 
@@ -212,10 +212,45 @@ export class Graph {
     nextStop: string,
     s_total: number
   ): GraphPosition {
+    const segments = this.getSegmentsAlongPath(
+      currentPosition,
+      stops,
+      nextStop,
+      s_total
+    );
+
+    if (segments.length === 0) {
+      return currentPosition;
+    }
+    const lastSegment = segments[-1];
+    return {
+      edge: lastSegment.edge,
+      distanceAlongEdge: lastSegment.end,
+    };
+  }
+
+  public getSegmentsAlongPath(
+    currentPosition: GraphPosition,
+    stops: RouteStop[],
+    nextStop: string,
+    s_total: number
+  ): SegmentSection[] {
+    const segments: SegmentSection[] = [];
     let s_remaining = s_total;
     while (s_remaining > 0) {
       const edgeDistanceRemaining =
         currentPosition.edge.len - currentPosition.distanceAlongEdge;
+
+      const segmentLength = Math.min(s_remaining, edgeDistanceRemaining);
+      const segmentStart = currentPosition.distanceAlongEdge;
+      const segmentEnd = segmentStart + segmentLength;
+
+      segments.push({
+        edge: currentPosition.edge,
+        start: segmentStart,
+        end: segmentEnd,
+      });
+
       if (s_remaining > edgeDistanceRemaining) {
         //find the next edge to move onto
         if (currentPosition.edge.v === nextStop) {
@@ -237,6 +272,6 @@ export class Graph {
         s_remaining = 0;
       }
     }
-    return currentPosition;
+    return segments;
   }
 }

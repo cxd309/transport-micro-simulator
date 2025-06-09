@@ -1,7 +1,12 @@
 import { GraphData } from "../graph/models";
 import { Graph } from "../graph/Graph";
 import fs from "fs";
-import { RouteStop } from "../simulation/models";
+import {
+  MAMap,
+  MARecord,
+  RouteStop,
+  SegmentSection,
+} from "../simulation/models";
 
 function zeroPad(num: number, size = 3): string {
   return num.toString().padStart(size, "0");
@@ -96,4 +101,88 @@ export function findNextStop(
   const curStopIndex = findStopIndex(currentNodeID, stops);
   const nextStopIndex = (curStopIndex + 1) % stops.length;
   return stops[nextStopIndex];
+}
+
+export function getSegmentConflict(
+  a: SegmentSection,
+  b: SegmentSection
+): boolean {
+  return a.edge.edgeID === b.edge.edgeID && a.start < b.end && b.start < a.end;
+}
+
+export function hasConflict(
+  proposed: SegmentSection[],
+  existing: MAMap,
+  selfID: string
+): boolean {
+  for (const [otherID, record] of existing.entries()) {
+    if (otherID === selfID) continue;
+    for (const segA of proposed) {
+      for (const segB of record.segments) {
+        if (getSegmentConflict(segA, segB)) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+export function truncateMA(
+  proposed: SegmentSection[],
+  existing: MAMap,
+  selfID: string
+): SegmentSection[] {
+  let earliestConflictDistance = Infinity;
+
+  let currentDistance = 0;
+
+  const segmentLength = (seg: SegmentSection) => seg.end - seg.start;
+
+  for (let i = 0; i < proposed.length; i++) {
+    const segA = proposed[i];
+
+    for (const [otherID, record] of existing.entries()) {
+      if (otherID === selfID) continue;
+
+      for (const segB of record.segments) {
+        if (getSegmentConflict(segA, segB)) {
+          const conflictStartOnSegment = Math.max(segA.start, segB.start);
+          const conflictDistanceFromStart =
+            currentDistance + (conflictStartOnSegment - segA.start);
+          if (conflictDistanceFromStart < earliestConflictDistance) {
+            earliestConflictDistance = conflictDistanceFromStart;
+          }
+        }
+      }
+    }
+
+    currentDistance += segmentLength(segA);
+  }
+
+  if (earliestConflictDistance === Infinity) {
+    return proposed;
+  }
+
+  const truncated: SegmentSection[] = [];
+  let distAccum = 0;
+
+  for (const seg of proposed) {
+    const segLen = segmentLength(seg);
+
+    if (distAccum + segLen < earliestConflictDistance) {
+      truncated.push({ ...seg });
+      distAccum += segLen;
+    } else {
+      const allowedEnd = seg.start + (earliestConflictDistance - distAccum);
+
+      truncated.push({
+        edge: seg.edge,
+        start: seg.start,
+        end: allowedEnd,
+      });
+      break;
+    }
+  }
+  return truncated;
 }

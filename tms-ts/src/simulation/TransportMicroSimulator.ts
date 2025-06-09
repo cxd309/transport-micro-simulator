@@ -1,24 +1,29 @@
 import { SimulationService } from "./SimulationService";
 import { Graph } from "../graph/Graph";
-import { GraphData } from "../graph/models";
-import { MARecord, TransportService } from "./models";
+import { GraphData, GraphPosition } from "../graph/models";
+import { MAMap, MARecord, TransportService } from "./models";
+import { truncateMA } from "../utils/helpers";
 
 export class TransportMicroSimulator {
   graph: Graph;
   simServices: SimulationService[];
   simTime: number;
-  grantedMAs: MARecord[];
+  maRecord: MAMap;
 
   constructor(graphData: GraphData, services: TransportService[]) {
     console.log("building simulator basis");
     this.graph = new Graph(graphData);
-    this.grantedMAs = [];
     this.simServices = [];
     this.simTime = 0;
+    this.maRecord = new Map();
 
     for (const s of services) {
       const simService = new SimulationService(s, this.graph);
       this.simServices.push(simService);
+      this.maRecord.set(simService.service.serviceID, {
+        serviceID: simService.service.serviceID,
+        segments: [],
+      });
     }
   }
 
@@ -54,25 +59,30 @@ export class TransportMicroSimulator {
     }
   }
 
-  private makeMARecord(): void {
-    this.grantedMAs = [];
-
-    for (const simService of this.simServices) {
-      const serviceID = simService.service.serviceID;
-      // find the current position
-
-      // find the projected stopping distance
-    }
-  }
-
   public step(timeStep: number): void {
     this.simTime += timeStep;
     const newSimServices: SimulationService[] = [];
 
-    // make a object to track all the movement authorities given
-
     for (const simService of this.simServices) {
-      simService.updatePosition(timeStep, this.graph);
+      const id = simService.service.serviceID;
+
+      const proposedMASegments = simService.calculateProposedMA(
+        this.graph,
+        timeStep
+      );
+
+      const grantedMASegments = truncateMA(
+        proposedMASegments,
+        this.maRecord,
+        id
+      );
+
+      this.maRecord.set(id, {
+        serviceID: id,
+        segments: grantedMASegments,
+      });
+
+      simService.updatePosition(timeStep, this.graph, grantedMASegments);
 
       newSimServices.push(simService);
     }

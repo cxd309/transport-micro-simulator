@@ -1,10 +1,12 @@
-import { GraphPosition } from "../graph/models";
+import { GraphEdge, GraphPosition } from "../graph/models";
 
 export type SimulationState =
   | "stationary"
   | "accelerating"
   | "decelerating"
   | "cruising";
+
+export type MAMap = Map<string, MARecord>;
 
 export interface RouteStop {
   nodeID: string; // nodeID for the stop
@@ -25,8 +27,13 @@ export interface VehicleClass {
   v_max: number; // maximum speed (m/s)
 }
 
+export interface SegmentSection {
+  edge: GraphEdge;
+  start: number; // meters
+  end: number; // meters
+}
+
 export interface MARecord {
   serviceID: string;
-  start: GraphPosition;
-  end: GraphPosition;
+  segments: SegmentSection[];
 }
