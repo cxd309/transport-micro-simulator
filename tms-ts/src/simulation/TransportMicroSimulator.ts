@@ -50,9 +50,9 @@ export class TransportMicroSimulator {
         "at edge",
         simService.currentPosition.edge.edgeID,
         "distance",
-        simService.currentPosition.distanceAlongEdge.toFixed(0),
+        simService.currentPosition.distanceAlongEdge.toFixed(1),
         "velocity",
-        simService.velocity.toFixed(0),
+        simService.velocity.toFixed(1),
         "state",
         simService.state
       );

@@ -38,7 +38,7 @@ export class SimulationService {
     ).route;
 
     // find the edge
-    let e: GraphEdge | undefined = g.getEdge(route[0], route[1]);
+    let e: GraphEdge | undefined = g.getEdge(service.startNodeID, route[0]);
 
     if (!e) {
       new TypeError("Invalid Route");
@@ -174,6 +174,8 @@ export class SimulationService {
     // is it authorised to accelerate
     if (s_nextStepMax <= s_ma && this.velocity < this.service.vehicle.v_max) {
       this.state = "accelerating";
+    } else if (this.velocity === 0) {
+      this.state = "stationary";
     } else if (s_nextStepCruise <= s_ma) {
       this.state = "cruising";
     } else {

@@ -193,11 +193,11 @@ export class Graph {
   public getNextEdge(u: string, v: string): GraphEdge | undefined {
     const { route } = this.getShortestPath(u, v);
 
-    if (route.length < 2) {
+    if (route.length < 1) {
       console.warn("getNextEdge: u is equal to v, no edge to find");
       return;
     }
-    return this.getEdge(route[0], route[1]);
+    return this.getEdge(u, route[0]);
   }
 
   public getDistanceToNode(currentPosition: GraphPosition, targetNode: string) {
