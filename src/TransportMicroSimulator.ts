@@ -71,6 +71,14 @@ interface SimulationLog {
   services: SimulationServiceLog[];
 }
 
+interface SimulatorParameters {
+  simID: string;
+  runTime: number;
+  timeStep: number;
+  graphData: GraphData;
+  services: TransportService[];
+}
+
 class SegmentSection {
   constructor(
     public edge: GraphEdge,
@@ -368,17 +376,21 @@ export class TransportMicroSimulator {
   maRecord: MovementAuthorityRecord;
   stopManager: StopManager;
   simLog: SimulationLog[];
+  runTime: number;
+  timeStep: number;
 
-  constructor(graphData: GraphData, services: TransportService[]) {
+  constructor(params: SimulatorParameters) {
     console.log("building simulator basis");
-    this.graph = new Graph(graphData);
+    this.graph = new Graph(params.graphData);
     this.simServices = {};
     this.simTime = 0;
     this.maRecord = {};
     this.stopManager = {};
     this.simLog = [];
+    this.runTime = params.runTime;
+    this.timeStep = params.timeStep;
 
-    for (const s of services) {
+    for (const s of params.services) {
       const simService = new SimulationService(s, this.graph);
       const serviceID = simService.service.serviceID;
       this.simServices[serviceID] = simService;
@@ -390,9 +402,12 @@ export class TransportMicroSimulator {
     }
   }
 
-  public run(timeStep: number, duration: number): SimulationLog[] {
+  public run(
+    timeStep: number = this.timeStep,
+    runTime: number = this.runTime
+  ): SimulationLog[] {
     console.log("running simulation");
-    for (let i = 0; i < duration / timeStep; i++) {
+    for (let i = 0; i < runTime / timeStep; i++) {
       this.step(timeStep);
     }
     console.log("simulation complete");

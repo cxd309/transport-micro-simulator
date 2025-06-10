@@ -227,15 +227,17 @@ class Graph {
     }
 }
 class TransportMicroSimulator {
-    constructor(graphData, services) {
+    constructor(params) {
         console.log("building simulator basis");
-        this.graph = new Graph(graphData);
+        this.graph = new Graph(params.graphData);
         this.simServices = {};
         this.simTime = 0;
         this.maRecord = {};
         this.stopManager = {};
         this.simLog = [];
-        for (const s of services) {
+        this.runTime = params.runTime;
+        this.timeStep = params.timeStep;
+        for (const s of params.services) {
             const simService = new SimulationService(s, this.graph);
             const serviceID = simService.service.serviceID;
             this.simServices[serviceID] = simService;
@@ -245,9 +247,9 @@ class TransportMicroSimulator {
             this.stopManager[n.nodeID] = false;
         }
     }
-    run(timeStep, duration) {
+    run(timeStep = this.timeStep, runTime = this.runTime) {
         console.log("running simulation");
-        for (let i = 0; i < duration / timeStep; i++) {
+        for (let i = 0; i < runTime / timeStep; i++) {
             this.step(timeStep);
         }
         console.log("simulation complete");
