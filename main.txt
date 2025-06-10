@@ -1,7 +1,3 @@
-import { GraphData } from "../graph/models";
-import { Graph } from "../graph/Graph";
-import fs from "fs";
-
 function zeroPad(num: number, size = 3): string {
   return num.toString().padStart(size, "0");
 }
@@ -61,7 +57,7 @@ export function createBasicLoopGraph(
 export function saveGraphToFile(graph: Graph, filePath: string): void {
   const graphData = graph.toJSON();
   const jsonString = JSON.stringify(graphData, null, 2); // pretty-print with 2 spaces
-  fs.writeFileSync(filePath, jsonString, "utf8");
+  //fs.writeFileSync(filePath, jsonString, "utf8");
   console.log(`Graph saved to ${filePath}`);
 }
 
@@ -80,6 +76,115 @@ export function saveGraphToDrawIO(graph: Graph, filePath: string): void {
 
   const outputString = outputList.join("\n");
 
-  fs.writeFileSync(filePath, outputList.join("\n"), "utf-8");
+  //fs.writeFileSync(filePath, outputList.join("\n"), "utf-8");
   console.log(`Graph saved to ${filePath}`);
 }
+
+const loopGraph = createBasicLoopGraph(4, 100, 20);
+
+const testGraph: GraphData = {
+  nodes: [
+    {
+      nodeID: "A",
+      type: "station",
+      loc: { x: 1, y: 1 },
+    },
+    {
+      nodeID: "B",
+      type: "station",
+      loc: { x: 1, y: -1 },
+    },
+    {
+      nodeID: "C",
+      type: "station",
+      loc: { x: 2, y: 0 },
+    },
+    {
+      nodeID: "D",
+      type: "station",
+      loc: { x: -1, y: 0 },
+    },
+  ],
+  edges: [
+    {
+      edgeID: "A->C",
+      u: "A",
+      v: "C",
+      len: 50,
+    },
+    {
+      edgeID: "B->C",
+      u: "B",
+      v: "C",
+      len: 50,
+    },
+    {
+      edgeID: "C->D",
+      u: "C",
+      v: "D",
+      len: 50,
+    },
+    {
+      edgeID: "D->A",
+      u: "D",
+      v: "A",
+      len: 50,
+    },
+    {
+      edgeID: "D->B",
+      u: "D",
+      v: "B",
+      len: 50,
+    },
+  ],
+};
+
+const g = new Graph(testGraph);
+
+saveGraphToDrawIO(g, "sim-outputs/drawio-graph.txt");
+
+const veh: VehicleClass = {
+  a_acc: 1,
+  a_dcc: 1,
+  v_max: 10,
+  name: "bus",
+};
+
+const r1: TransportService = {
+  stops: [
+    {
+      nodeID: "A",
+      t_dwell: 10,
+    },
+    {
+      nodeID: "D",
+      t_dwell: 10,
+    },
+  ],
+  serviceID: "SVC.001",
+  startNodeID: "A",
+  vehicle: veh,
+};
+
+const r2: TransportService = {
+  stops: [
+    {
+      nodeID: "B",
+      t_dwell: 10,
+    },
+    {
+      nodeID: "D",
+      t_dwell: 10,
+    },
+  ],
+  serviceID: "SVC.002",
+  startNodeID: "B",
+  vehicle: veh,
+};
+
+const sim = new TransportMicroSimulator(testGraph, [r1, r2]);
+sim.run(1, 120);
+
+//const { route, len } = graph.shortestPath('E', 'A'); // Find shortest path from node "A"
+//console.log(route); // Shortest distances from node A
+//console.log(len); // Previous nodes to reconstruct paths
