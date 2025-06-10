@@ -2,14 +2,20 @@
   "name": "transport-micro-simulator",
   "version": "0.1",
   "description": "TS based micro transport sim",
-  "main": "dist/main.js",
+  "main": "docs/js/TransportMicroSimulator.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/main.js",
     "dev": "tsc --watch"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cxd309/transport-micro-simulator.git"
   },
   "author": "cxd309",
   "license": "GPL-3.0-only",
+  "bugs": {
+    "url": "https://github.com/cxd309/gh-pages-emulator/issues"
+  },
   "devDependencies": {
     "@types/node": "^22.15.21",
     "typescript": "^5.8.3"
