@@ -1,2 +1,2 @@
 # transport-micro-simulator
-Micro Simulator for transport systems
+Micro Simulator for transport systems, built in typescript
