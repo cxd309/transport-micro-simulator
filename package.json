@@ -14,7 +14,7 @@
   "author": "cxd309",
   "license": "GPL-3.0-only",
   "bugs": {
-    "url": "https://github.com/cxd309/gh-pages-emulator/issues"
+    "url": "https://github.com/cxd309/transport-micro-simulator/issues"
   },
   "devDependencies": {
     "@types/node": "^22.15.21",

@@ -8,12 +8,12 @@ type SimulationState =
   | "decelerating"
   | "cruising";
 
-interface Coordinate {
+export interface Coordinate {
   x: number;
   y: number;
 }
 
-interface GraphEdge {
+export interface GraphEdge {
   edgeID: string;
   u: string;
   v: string;
@@ -21,13 +21,13 @@ interface GraphEdge {
   parentEdge?: string;
 }
 
-interface GraphNode {
+export interface GraphNode {
   loc: Coordinate;
   nodeID: string;
   type: "main" | "station" | "side";
 }
 
-interface GraphData {
+export interface GraphData {
   nodes: GraphNode[];
   edges: GraphEdge[];
 }
@@ -37,19 +37,19 @@ interface GraphPosition {
   distanceAlongEdge: number;
 }
 
-interface RouteStop {
+export interface RouteStop {
   nodeID: string; // nodeID for the stop
   t_dwell: number; // dwell time at stop (s)
 }
 
-interface TransportService {
+export interface TransportService {
   serviceID: string;
   startNodeID: string; // startNodeID
   stops: RouteStop[]; // stops to make (this will be cyclical A->B->C->A...)
   vehicle: VehicleClass;
 }
 
-interface VehicleClass {
+export interface VehicleClass {
   name: string;
   a_acc: number; // acceleration rate (m/s/s)
   a_dcc: number; // deceleration rate (m/s/s)
@@ -66,12 +66,12 @@ interface SimulationServiceLog {
   remainingDwell: number;
 }
 
-interface SimulationLog {
+export interface SimulationLog {
   time: number;
   services: SimulationServiceLog[];
 }
 
-interface SimulatorParameters {
+export interface SimulatorParameters {
   simID: string;
   runTime: number;
   timeStep: number;

@@ -1,7 +1,7 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.TransportMicroSimulator = void 0;
 class SegmentSection {
+    edge;
+    start;
+    end;
     constructor(edge, start, end) {
         this.edge = edge;
         this.start = start;
@@ -15,6 +15,10 @@ class SegmentSection {
     }
 }
 class Graph {
+    edges;
+    nodes;
+    edgeMap;
+    shortestPathCache;
     constructor(graphData = { edges: [], nodes: [] }) {
         this.edges = [];
         this.nodes = [];
@@ -226,7 +230,15 @@ class Graph {
         return segments;
     }
 }
-class TransportMicroSimulator {
+export class TransportMicroSimulator {
+    graph;
+    simServices;
+    simTime;
+    maRecord;
+    stopManager;
+    simLog;
+    runTime;
+    timeStep;
     constructor(params) {
         console.log("building simulator basis");
         this.graph = new Graph(params.graphData);
@@ -289,8 +301,14 @@ class TransportMicroSimulator {
         return log;
     }
 }
-exports.TransportMicroSimulator = TransportMicroSimulator;
 class SimulationService {
+    service;
+    currentPosition;
+    nextStop; //nodeID for the next stop
+    state;
+    velocity;
+    remainingDwell;
+    stopManager;
     constructor(service, g) {
         this.service = service;
         if (service.startNodeID === service.stops[0].nodeID) {

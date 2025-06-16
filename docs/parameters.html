@@ -39,6 +39,71 @@
           </li>
         </ul>
       </header>
+      <h1>Micro Transport Simulator - Parameters</h1>
+      <p>Create .json file with simulation parameters</p>
+      <form id="Simulator Parameter form">
+        <div class="mb-3">
+          <label class="form-label" for="operating-concept-select"
+            >Operating Concept</label
+          >
+          <select
+            class="form-select form-select-lg"
+            id="operating-concept-select"
+          >
+            <option value="all-stop">All-Stop</option>
+          </select>
+        </div>
+        <fieldset class="mb-3">
+          <legend>Infrastructure Layout</legend>
+          <div class="form-floating mb-3">
+            <input
+              type="number"
+              class="form-control"
+              id="number-station-input"
+            />
+            <label for="number-station-input">Number of Stations</label>
+          </div>
+          <div class="form-floating mb-3">
+            <input
+              type="number"
+              class="form-control"
+              id="interstation-distance-input"
+            />
+            <label for="interstation-distance-input"
+              >Interstation Distance (m)</label
+            >
+          </div>
+        </fieldset>
+        <fieldset class="mb-3">
+          <legend>Vehicles</legend>
+          <div class="form-floating mb-3">
+            <input
+              type="number"
+              class="form-control"
+              id="number-services-input"
+            />
+            <label for="number-services-input">Number of Services</label>
+          </div>
+          <div class="form-floating mb-3">
+            <input type="text" class="form-control" id="veh-name-input" />
+            <label for="veh-name-input">Vehicle Class Name</label>
+          </div>
+          <div class="form-floating mb-3">
+            <input type="number" class="form-control" id="acceleration-input" />
+            <label for="acceleration-input">Acceleration (m/s/s)</label>
+          </div>
+          <div class="form-floating mb-3">
+            <input type="number" class="form-control" id="deceleration-input" />
+            <label for="deceleration-input">Deceleration (m/s/s)</label>
+          </div>
+          <div class="form-floating mb-3">
+            <input type="number" class="form-control" id="velocity-input" />
+            <label for="velocity-input">Max Velocity (m/s)</label>
+          </div>
+        </fieldset>
+
+        <button type="submit" class="btn btn-primary">Create .json file</button>
+      </form>
     </div>
     <script
       src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"
