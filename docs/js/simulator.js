@@ -1,5 +1,5 @@
-import { TransportMicroSimulator, } from "./TransportMicroSimulator";
-import { isSimulatorParameters } from "./type_checking";
+import { TransportMicroSimulator, } from "./TransportMicroSimulator.js";
+import { isSimulatorParameters } from "./type_checking.js";
 const FORM_ID = "fileUploadForm";
 const FILE_ID = "fileSelector";
 window.addEventListener("load", (event) => {

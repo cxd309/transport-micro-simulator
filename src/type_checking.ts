@@ -7,7 +7,7 @@ import {
   RouteStop,
   VehicleClass,
   TransportService,
-} from "./TransportMicroSimulator";
+} from "./TransportMicroSimulator.js";
 
 function isCoordinate(obj: any): obj is Coordinate {
   return (

@@ -1,4 +1,4 @@
-import { TransportMicroSimulator } from "./TransportMicroSimulator";
+import { TransportMicroSimulator } from "./TransportMicroSimulator.js";
 
 function test(): string {
   return "test";

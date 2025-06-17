@@ -3,8 +3,8 @@ import {
   SimulatorParameters,
   TransportMicroSimulator,
   SimulationLog,
-} from "./TransportMicroSimulator";
-import { isSimulatorParameters } from "./type_checking";
+} from "./TransportMicroSimulator.js";
+import { isSimulatorParameters } from "./type_checking.js";
 
 const FORM_ID = "fileUploadForm";
 const FILE_ID = "fileSelector";
